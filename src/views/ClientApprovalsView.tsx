@@ -17,6 +17,7 @@ import {
   ImageIcon, 
   Film, 
   ChevronRight,
+  ChevronLeft,
   Maximize2,
   Calendar,
   Layers,
@@ -24,11 +25,36 @@ import {
   HelpCircle,
   ThumbsUp,
   MessageCircle,
-  X
+  X,
+  LayoutGrid,
+  Columns3,
+  Smartphone,
+  List,
+  SlidersHorizontal,
+  Plus,
+  Share2,
+  FileText,
+  TrendingUp,
+  Wrench,
+  ChevronDown,
+  Filter,
+  CheckSquare,
+  StickyNote,
+  Tag,
+  AlignLeft,
+  CalendarDays,
+  User,
+  Sliders,
+  KeyRound,
+  Lock,
+  ShieldCheck,
+  Monitor,
+  PhoneCall
 } from 'lucide-react';
 import { DemandItem, Client, UserProfile, DemandAttachment } from '../types';
+import { ClientPasswordManagerModal } from '../components/ClientPasswordManagerModal';
 
-interface ClientApprovalsViewProps {
+export interface ClientApprovalsViewProps {
   demands: DemandItem[];
   clients: Client[];
   currentUser: UserProfile;
@@ -37,12 +63,16 @@ interface ClientApprovalsViewProps {
     action: 'aprovado' | 'reprovado' | 'alteracao_solicitada', 
     feedback?: string
   ) => void;
-  onOpenClientApprovalPortal: (demand: DemandItem) => void;
-  onNavigateToPortal: () => void;
+  onOpenClientApprovalPortal?: (demand: DemandItem) => void;
+  onNavigateToPortal?: () => void;
   onOpenWhatsAppNotification?: (demand: DemandItem) => void;
+  onUpdateClient?: (client: Client) => void;
+  onOpenDemandModal?: (demand: DemandItem) => void;
+  onSelectClientDemands?: (clientName: string) => void;
 }
 
-type FilterTab = 'pendentes' | 'todos' | 'aprovados' | 'alteracoes' | 'reprovados';
+type ViewMode = 'grade' | 'quadro' | 'feed' | 'lista' | 'calendario' | 'gantt';
+type TopNavTab = 'demandas' | 'social' | 'aprovacao' | 'notas' | 'desempenho' | 'chat' | 'ferramentas';
 
 export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
   demands,
@@ -52,19 +82,47 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
   onOpenClientApprovalPortal,
   onNavigateToPortal,
   onOpenWhatsAppNotification,
+  onUpdateClient,
+  onOpenDemandModal,
+  onSelectClientDemands,
 }) => {
-  const [activeTab, setActiveTab] = useState<FilterTab>('pendentes');
+  // Navigation & View Mode states matching image
+  const [topNavTab, setTopNavTab] = useState<TopNavTab>('aprovacao');
+  const [viewMode, setViewMode] = useState<ViewMode>('grade');
+  
+  // Filters matching image
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('todos');
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('todos');
+  const [selectedClientFilter, setSelectedClientFilter] = useState<string>('todos');
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+  const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+  const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
+  const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
+  const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
+  const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
+  const [isBulkApprovalModalOpen, setIsBulkApprovalModalOpen] = useState(false);
+  const [isPasswordManagerModalOpen, setIsPasswordManagerModalOpen] = useState(false);
+  const [isSimulatorModalOpen, setIsSimulatorModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [feedbackDemandId, setFeedbackDemandId] = useState<string | null>(null);
-  const [feedbackText, setFeedbackText] = useState('');
-  const [rejectionDemandId, setRejectionDemandId] = useState<string | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [actionSuccessNotice, setActionSuccessNotice] = useState<{ id: string; message: string; type: 'success' | 'warn' } | null>(null);
-  const [previewMedia, setPreviewMedia] = useState<{ url: string; title: string; type?: string } | null>(null);
-  const [copiedDemandId, setCopiedDemandId] = useState<string | null>(null);
+  const [activeSimulatorDevice, setActiveSimulatorDevice] = useState<'mobile' | 'desktop'>('mobile');
 
-  // Client name scope
+  // Approval action states
+  const [feedbackDemand, setFeedbackDemand] = useState<DemandItem | null>(null);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [actionSuccessNotice, setActionSuccessNotice] = useState<{ id: string; message: string; type: 'success' | 'warn' } | null>(null);
+  const [previewDemand, setPreviewDemand] = useState<DemandItem | null>(null);
+  const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
+
+  // New post modal form state
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostType, setNewPostType] = useState('Stories');
+  const [newPostClient, setNewPostClient] = useState('');
+  const [newPostDescription, setNewPostDescription] = useState('');
+
+  // Client user scope detection
+  const isClientRole = currentUser.role === 'cliente';
   const clientScopeName = (currentUser.clientName || currentUser.name || '').trim().toLowerCase();
+  
   const clientObj = useMemo(() => {
     return clients.find(
       (c) => c.id === currentUser.clientId || 
@@ -73,8 +131,9 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
     );
   }, [clients, currentUser.clientId, clientScopeName]);
 
-  // Filter demands strictly for this client
-  const clientDemands = useMemo(() => {
+  // Scope demands: if client role, filter strictly by this client AND strictly by column "Aprovação Cliente"
+  const clientAllDemands = useMemo(() => {
+    if (!isClientRole) return demands;
     return demands.filter((d) => {
       if (currentUser.clientId && d.clientId === currentUser.clientId) return true;
       const dClient = (d.client || '').trim().toLowerCase();
@@ -85,163 +144,296 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
         (clientObj && (dClient === clientObj.name.toLowerCase() || dClient === (clientObj.companyName || '').toLowerCase()))
       );
     });
-  }, [demands, currentUser.clientId, clientScopeName, clientObj]);
+  }, [demands, isClientRole, currentUser.clientId, clientScopeName, clientObj]);
 
-  // Metrics
-  const pendingDemands = useMemo(() => {
-    return clientDemands.filter((d) => {
-      return (
+  const scopedDemands = useMemo(() => {
+    // Regra: Mostrar a demanda no portal do cliente, SOMENTE quando a demanda estiver na coluna Aprovação Cliente
+    return clientAllDemands.filter((d) => {
+      const isApproval = 
         d.columnId === 'aprovacao' || 
-        d.approvalStatus === 'pendente' ||
-        (!d.approvalStatus && d.columnId === 'aprovacao')
-      );
+        d.columnId === 'aprovacao-cliente' || 
+        d.columnId === 'aprovacao_cliente' || 
+        (d.columnId && d.columnId.toLowerCase().includes('aprov'));
+
+      // Se o usuário selecionou o filtro 'aprovado', permite ver os itens já aprovados
+      if (selectedStatusFilter === 'aprovado') {
+        return d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas';
+      }
+
+      // Por padrão no portal do cliente, mostrar estritamente as demandas que estão na coluna Aprovação Cliente
+      return isApproval;
     });
-  }, [clientDemands]);
+  }, [clientAllDemands, selectedStatusFilter]);
 
-  const approvedDemands = useMemo(() => {
-    return clientDemands.filter((d) => d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas');
-  }, [clientDemands]);
-
-  const changesRequestedDemands = useMemo(() => {
-    return clientDemands.filter((d) => d.approvalStatus === 'alteracao_solicitada');
-  }, [clientDemands]);
-
-  const rejectedDemands = useMemo(() => {
-    return clientDemands.filter((d) => d.approvalStatus === 'reprovado');
-  }, [clientDemands]);
-
-  // Filtered demands based on active tab and search
+  // Filtered demands based on controls
   const filteredDemands = useMemo(() => {
-    return clientDemands.filter((d) => {
-      // Tab filter
-      if (activeTab === 'pendentes') {
+    return scopedDemands.filter((d) => {
+      // Status filter
+      if (selectedStatusFilter === 'pendente') {
         const isPending = d.columnId === 'aprovacao' || d.approvalStatus === 'pendente' || (!d.approvalStatus && d.columnId === 'aprovacao');
         if (!isPending) return false;
-      } else if (activeTab === 'aprovados') {
+      } else if (selectedStatusFilter === 'aprovado') {
         const isApproved = d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas';
         if (!isApproved) return false;
-      } else if (activeTab === 'alteracoes') {
+      } else if (selectedStatusFilter === 'alteracoes') {
         if (d.approvalStatus !== 'alteracao_solicitada') return false;
-      } else if (activeTab === 'reprovados') {
+      } else if (selectedStatusFilter === 'reprovado') {
         if (d.approvalStatus !== 'reprovado') return false;
       }
 
-      // Search filter
+      // Type / Format filter
+      if (selectedTypeFilter !== 'todos') {
+        const typeMatch = (d.type || '').toLowerCase() === selectedTypeFilter.toLowerCase();
+        if (!typeMatch) return false;
+      }
+
+      // Client filter (if agency mode)
+      if (!isClientRole && selectedClientFilter !== 'todos') {
+        if (d.client.toLowerCase() !== selectedClientFilter.toLowerCase()) return false;
+      }
+
+      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesTitle = (d.title || '').toLowerCase().includes(q);
         const matchesDesc = (d.description || '').toLowerCase().includes(q);
+        const matchesClient = (d.client || '').toLowerCase().includes(q);
         const matchesType = (d.type || '').toLowerCase().includes(q);
-        const matchesCat = (d.serviceCategory || '').toLowerCase().includes(q);
-        if (!matchesTitle && !matchesDesc && !matchesType && !matchesCat) return false;
+        if (!matchesTitle && !matchesDesc && !matchesClient && !matchesType) return false;
       }
 
       return true;
     });
-  }, [clientDemands, activeTab, searchQuery]);
+  }, [scopedDemands, selectedStatusFilter, selectedTypeFilter, selectedClientFilter, searchQuery, isClientRole]);
 
-  const handleApprove = (demand: DemandItem) => {
+  // Counts
+  const totalCount = scopedDemands.length;
+  const pendingCount = clientAllDemands.filter(
+    (d) => (d.columnId === 'aprovacao' || (d.columnId && d.columnId.toLowerCase().includes('aprov'))) && (d.approvalStatus === 'pendente' || !d.approvalStatus || d.columnId === 'aprovacao')
+  ).length;
+  const approvedCount = clientAllDemands.filter(
+    (d) => d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas'
+  ).length;
+  const changesCount = clientAllDemands.filter(
+    (d) => d.approvalStatus === 'alteracao_solicitada'
+  ).length;
+
+  const handleApprove = (demand: DemandItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     onClientApprovalAction(demand.id, 'aprovado');
     setActionSuccessNotice({
       id: demand.id,
-      message: `"${demand.title}" foi aprovada com sucesso! Movida para agendamento.`,
+      message: `"${demand.title}" aprovado! A agência foi avisada.`,
+      type: 'success',
+    });
+    setTimeout(() => setActionSuccessNotice(null), 3500);
+  };
+
+  const handleBulkApprove = () => {
+    const pendings = scopedDemands.filter(
+      (d) => d.columnId === 'aprovacao' || d.approvalStatus === 'pendente' || (!d.approvalStatus && d.columnId === 'aprovacao')
+    );
+    pendings.forEach((d) => onClientApprovalAction(d.id, 'aprovado'));
+    setIsBulkApprovalModalOpen(false);
+    setActionSuccessNotice({
+      id: 'bulk',
+      message: `${pendings.length} posts aprovados com sucesso! A agência foi avisada.`,
       type: 'success',
     });
     setTimeout(() => setActionSuccessNotice(null), 4000);
   };
 
-  const handleSendFeedback = (demand: DemandItem) => {
-    if (!feedbackText.trim()) return;
-    onClientApprovalAction(demand.id, 'alteracao_solicitada', feedbackText.trim());
+  const handleSendFeedback = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedbackDemand || !feedbackText.trim()) return;
+    onClientApprovalAction(feedbackDemand.id, 'alteracao_solicitada', feedbackText.trim());
     setActionSuccessNotice({
-      id: demand.id,
-      message: `Solicitação de alteração enviada para a equipe de criação.`,
+      id: feedbackDemand.id,
+      message: `Solicitação de alteração enviada para "${feedbackDemand.title}".`,
       type: 'warn',
     });
-    setFeedbackDemandId(null);
+    setFeedbackDemand(null);
     setFeedbackText('');
-    setTimeout(() => setActionSuccessNotice(null), 4000);
+    setTimeout(() => setActionSuccessNotice(null), 3500);
   };
 
-  const handleSendRejection = (demand: DemandItem) => {
-    onClientApprovalAction(demand.id, 'reprovado', rejectionReason.trim() || undefined);
-    setActionSuccessNotice({
-      id: demand.id,
-      message: `Demanda reprovada. Retornada para produção da agência.`,
-      type: 'warn',
-    });
-    setRejectionDemandId(null);
-    setRejectionReason('');
-    setTimeout(() => setActionSuccessNotice(null), 4000);
-  };
-
-  const handleCopyText = (demand: DemandItem) => {
-    const textToCopy = demand.description || demand.title;
-    navigator.clipboard.writeText(textToCopy);
-    setCopiedDemandId(demand.id);
-    setTimeout(() => setCopiedDemandId(null), 2500);
+  const openPreview = (demand: DemandItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setPreviewDemand(demand);
+    setPreviewSlideIndex(0);
   };
 
   return (
-    <div className="space-y-6 pb-16 animate-in fade-in duration-200">
-      {/* Top Banner / Client Welcome */}
-      <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#142142] via-[#1a2d59] to-[#0f172a] text-white p-6 sm:p-8 shadow-xl border border-white/10">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-[#fab518]/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 -mb-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#fab518]/20 border border-[#fab518]/40 text-[#fab518] text-xs font-black uppercase tracking-wider">
-              <Sparkles size={13} className="animate-spin-slow" />
-              <span>Portal de Aprovação Exclusivo</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              Central de Aprovações • {currentUser.clientName || currentUser.name}
-            </h1>
-            <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Aqui você revisa todos os criativos, vídeos e materiais criados pela equipe da <strong>Help Ideias Digitais</strong>. 
-              Aprove em 1 clique ou solicite ajustes para que os materiais fiquem perfeitos antes da publicação!
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+    <div className="space-y-6 pb-20 animate-in fade-in duration-300">
+      {/* 1. TOP FLOATING PILL NAVIGATION BAR (Matching exact design from image - Oculto na visualização do cliente) */}
+      {!isClientRole && (
+        <div className="flex items-center justify-center pt-1 pb-1">
+          <div className="inline-flex items-center gap-1 sm:gap-2 p-1.5 bg-white dark:bg-[#0f172a] rounded-full border border-slate-200/90 dark:border-slate-800 shadow-md shadow-slate-200/40 dark:shadow-black/40 overflow-x-auto max-w-full">
             <button
               type="button"
-              onClick={onNavigateToPortal}
-              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 border border-white/15 cursor-pointer backdrop-blur-xs"
+              onClick={() => onNavigateToPortal && onNavigateToPortal()}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                topNavTab === 'demandas' 
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs' 
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+              }`}
             >
-              <Layers size={15} />
-              <span>Ver Todos os Materiais (Kanban)</span>
+              <Columns3 size={15} />
+              <span>Demandas</span>
             </button>
-            {clientObj?.phone && (
-              <a
-                href={`https://wa.me/55${clientObj.phone.replace(/\D/g, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-black transition-all flex items-center gap-2 shadow-md cursor-pointer"
+
+            <button
+              type="button"
+              onClick={() => setTopNavTab('social')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                topNavTab === 'social' 
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs' 
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              <Share2 size={15} />
+              <span>Social</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTopNavTab('aprovacao')}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black bg-[#fab518] text-[#142142] shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              <CheckSquare size={15} />
+              <span>Aprovação</span>
+              {pendingCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-[#142142] text-[#fab518] text-[10px] font-black flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTopNavTab('notas')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                topNavTab === 'notas' 
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs' 
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              <StickyNote size={15} />
+              <span>Notas</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTopNavTab('desempenho')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                topNavTab === 'desempenho' 
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs' 
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              <TrendingUp size={15} />
+              <span>Desempenho</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTopNavTab('chat')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                topNavTab === 'chat' 
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs' 
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              <MessageSquare size={15} />
+              <span>Chat</span>
+            </button>
+
+            {/* Tools Menu */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsToolsDropdownOpen(!isToolsDropdownOpen)}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  topNavTab === 'ferramentas' || isToolsDropdownOpen
+                    ? 'bg-[#fab518] text-[#142142] font-black shadow-xs' 
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                }`}
               >
-                <MessageCircle size={15} />
-                <span>Falar com a Agência</span>
-              </a>
-            )}
+                <Wrench size={14} />
+                <span>Ferramentas</span>
+                <ChevronDown size={13} className={`transition-transform duration-200 ${isToolsDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isToolsDropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xl z-40 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPasswordManagerModalOpen(true);
+                      setIsToolsDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+                      <KeyRound size={16} />
+                    </div>
+                    <div>
+                      <p className="font-bold">Acessos & Senhas</p>
+                      <p className="text-[10px] text-slate-400 font-normal">Credenciais dos clientes</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSimulatorModalOpen(true);
+                      setIsToolsDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
+                      <Smartphone size={16} />
+                    </div>
+                    <div>
+                      <p className="font-bold">Simulador do Cliente</p>
+                      <p className="text-[10px] text-slate-400 font-normal">Prévia mobile do portal</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Global Toast Notification */}
+      {/* 2. TITLE SECTION (Matching exact typography from image) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+        <div className="space-y-1">
+          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+            Aprovação de Posts
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+            {isClientRole ? (
+              <span>Visualizando criativos de <strong>{currentUser.clientName || currentUser.name}</strong> • {filteredDemands.length} materiais listados</span>
+            ) : (
+              <span>Painel de Aprovação de Criativos e Campanhas da Agência</span>
+            )}
+          </p>
+        </div>
+
+        {/* Action toast */}
         {actionSuccessNotice && (
-          <div className={`mt-6 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold animate-in slide-in-from-top-2 duration-200 ${
+          <div className={`px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-bold animate-in slide-in-from-top-2 duration-200 ${
             actionSuccessNotice.type === 'success' 
-              ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-200' 
-              : 'bg-amber-500/20 border border-amber-400/40 text-amber-200'
+              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20' 
+              : 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
           }`}>
-            <div className="flex items-center gap-2">
-              {actionSuccessNotice.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-              <span>{actionSuccessNotice.message}</span>
-            </div>
+            <CheckCircle2 size={16} />
+            <span>{actionSuccessNotice.message}</span>
             <button
               type="button"
               onClick={() => setActionSuccessNotice(null)}
-              className="p-1 hover:opacity-75 cursor-pointer"
+              className="ml-2 hover:opacity-80 cursor-pointer"
             >
               <X size={14} />
             </button>
@@ -249,523 +441,553 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
         )}
       </div>
 
-      {/* Status Counters */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {/* Pending Card */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('pendentes')}
-          className={`text-left p-4.5 rounded-[22px] border transition-all cursor-pointer ${
-            activeTab === 'pendentes'
-              ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 ring-2 ring-[#fab518] shadow-sm'
-              : 'bg-white dark:bg-[#0f172a] border-slate-200/90 dark:border-slate-800 hover:border-amber-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              Aguardando Aprovação
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-              <Clock size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#142142] dark:text-white mt-2 tabular-nums">
-            {pendingDemands.length}
-          </div>
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mt-0.5">
-            {pendingDemands.length === 1 ? '1 material pendente' : `${pendingDemands.length} materiais pendentes`}
-          </span>
-        </button>
-
-        {/* Changes Requested Card */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('alteracoes')}
-          className={`text-left p-4.5 rounded-[22px] border transition-all cursor-pointer ${
-            activeTab === 'alteracoes'
-              ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 ring-2 ring-blue-500 shadow-sm'
-              : 'bg-white dark:bg-[#0f172a] border-slate-200/90 dark:border-slate-800 hover:border-blue-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-              Ajustes em Produção
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-              <MessageSquare size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#142142] dark:text-white mt-2 tabular-nums">
-            {changesRequestedDemands.length}
-          </div>
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mt-0.5">
-            Com a equipe de criação
-          </span>
-        </button>
-
-        {/* Approved Card */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('aprovados')}
-          className={`text-left p-4.5 rounded-[22px] border transition-all cursor-pointer ${
-            activeTab === 'aprovados'
-              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 ring-2 ring-emerald-500 shadow-sm'
-              : 'bg-white dark:bg-[#0f172a] border-slate-200/90 dark:border-slate-800 hover:border-emerald-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              Aprovados & Prontos
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <CheckCircle2 size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#142142] dark:text-white mt-2 tabular-nums">
-            {approvedDemands.length}
-          </div>
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mt-0.5">
-            Prontos para publicação
-          </span>
-        </button>
-
-        {/* Total Deliverables */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('todos')}
-          className={`text-left p-4.5 rounded-[22px] border transition-all cursor-pointer ${
-            activeTab === 'todos'
-              ? 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 ring-2 ring-slate-400 shadow-sm'
-              : 'bg-white dark:bg-[#0f172a] border-slate-200/90 dark:border-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total de Entregáveis
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
-              <Layers size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#142142] dark:text-white mt-2 tabular-nums">
-            {clientDemands.length}
-          </div>
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mt-0.5">
-            Materiais no histórico
-          </span>
-        </button>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="bg-white dark:bg-[#0f172a] rounded-[24px] p-4 border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-[#F5F7FA] dark:bg-slate-800/80 rounded-2xl w-full md:w-auto overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('pendentes')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'pendentes'
-                ? 'bg-[#142142] text-[#fab518] shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Clock size={13} />
-            <span>Aguardando Aprovação ({pendingDemands.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('alteracoes')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'alteracoes'
-                ? 'bg-[#142142] text-[#fab518] shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <MessageSquare size={13} />
-            <span>Ajustes Solicitados ({changesRequestedDemands.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('aprovados')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'aprovados'
-                ? 'bg-[#142142] text-[#fab518] shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <CheckCircle2 size={13} />
-            <span>Aprovados ({approvedDemands.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('todos')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'todos'
-                ? 'bg-[#142142] text-[#fab518] shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <span>Todos ({clientDemands.length})</span>
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="relative w-full md:w-72">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar material por nome..."
-            className="w-full bg-[#F5F7FA] dark:bg-slate-800 text-xs font-semibold text-[#142142] dark:text-white pl-9.5 pr-4 py-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-          />
-        </div>
-      </div>
-
-      {/* List of Approval Demands */}
-      {filteredDemands.length === 0 ? (
-        <div className="bg-white dark:bg-[#0f172a] rounded-[28px] p-12 text-center border border-slate-200/90 dark:border-slate-800 space-y-4 shadow-xs">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-[#fab518] flex items-center justify-center mx-auto">
-            {activeTab === 'pendentes' ? <CheckCircle2 size={32} /> : <Search size={32} />}
-          </div>
-          <div className="max-w-md mx-auto space-y-1">
-            <h3 className="text-lg font-black text-[#142142] dark:text-white">
-              {activeTab === 'pendentes' 
-                ? 'Tudo em dia! Nenhum material aguardando aprovação.' 
-                : 'Nenhum material encontrado com os filtros atuais.'}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {activeTab === 'pendentes'
-                ? 'Você revisou e aprovou todas as demandas pendentes. Quando a agência enviar novos criativos, eles aparecerão aqui para sua validação.'
-                : 'Tente alterar os termos da busca ou selecionar outra aba.'}
-            </p>
-          </div>
-          <div className="pt-2">
+      {/* 3. CONTROLS & VIEW MODES TOOLBAR (Matching image exactly) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        {/* Left Segment: Dropdown, Filters button, View Modes */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          {/* Status Dropdown "Todos (12) ▾" */}
+          <div className="relative">
             <button
               type="button"
-              onClick={onNavigateToPortal}
-              className="px-5 py-2.5 bg-[#142142] text-[#fab518] rounded-xl text-xs font-black shadow-md hover:bg-[#1a2d59] transition-all cursor-pointer inline-flex items-center gap-2"
+              onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-[#0f172a] hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full border border-slate-200/90 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 shadow-2xs cursor-pointer transition-all"
             >
-              <span>Ver todos os materiais no Portal</span>
-              <ArrowRight size={14} />
+              <span>
+                {selectedStatusFilter === 'todos' ? `Todos (${totalCount})` :
+                 selectedStatusFilter === 'pendente' ? `Pendentes (${pendingCount})` :
+                 selectedStatusFilter === 'alteracoes' ? `Ajustes (${changesCount})` :
+                 selectedStatusFilter === 'aprovado' ? `Aprovados (${approvedCount})` : 'Filtrado'}
+              </span>
+              <ChevronDown size={14} className="text-slate-400" />
+            </button>
+
+            {isFilterDropdownOpen && (
+              <div className="absolute left-0 top-full mt-2 w-52 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xl z-30 p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  type="button"
+                  onClick={() => { setSelectedStatusFilter('todos'); setIsFilterDropdownOpen(false); }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold cursor-pointer transition-colors ${
+                    selectedStatusFilter === 'todos' ? 'bg-[#fab518] text-[#142142]' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span>Todos os Posts</span>
+                  <span className="text-[11px] opacity-75">{totalCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedStatusFilter('pendente'); setIsFilterDropdownOpen(false); }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold cursor-pointer transition-colors ${
+                    selectedStatusFilter === 'pendente' ? 'bg-[#fab518] text-[#142142]' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span>Aguardando Aprovação</span>
+                  <span className="text-[11px] opacity-75">{pendingCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedStatusFilter('alteracoes'); setIsFilterDropdownOpen(false); }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold cursor-pointer transition-colors ${
+                    selectedStatusFilter === 'alteracoes' ? 'bg-[#fab518] text-[#142142]' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span>Alterações Solicitadas</span>
+                  <span className="text-[11px] opacity-75">{changesCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedStatusFilter('aprovado'); setIsFilterDropdownOpen(false); }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold cursor-pointer transition-colors ${
+                    selectedStatusFilter === 'aprovado' ? 'bg-[#fab518] text-[#142142]' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span>Aprovados</span>
+                  <span className="text-[11px] opacity-75">{approvedCount}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Client Filter Dropdown for Agency */}
+          {!isClientRole && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsClientDropdownOpen(!isClientDropdownOpen)}
+                className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-[#0f172a] hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full border border-slate-200/90 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 shadow-2xs cursor-pointer transition-all"
+              >
+                <Building2 size={13} className="text-slate-400" />
+                <span className="max-w-[130px] truncate">
+                  {selectedClientFilter === 'todos' ? 'Todos Clientes' : selectedClientFilter}
+                </span>
+                <ChevronDown size={14} className="text-slate-400" />
+              </button>
+
+              {isClientDropdownOpen && (
+                <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xl z-30 p-1.5 space-y-1 max-h-72 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedClientFilter('todos'); setIsClientDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold cursor-pointer transition-colors ${
+                      selectedClientFilter === 'todos' ? 'bg-[#fab518] text-[#142142]' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span>Todos os Clientes</span>
+                    <span className="text-[11px] opacity-75">{clients.length}</span>
+                  </button>
+                  {clients.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { setSelectedClientFilter(c.name); setIsClientDropdownOpen(false); }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold cursor-pointer transition-colors ${
+                        selectedClientFilter.toLowerCase() === c.name.toLowerCase() ? 'bg-[#fab518] text-[#142142]' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className="truncate">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Filtros button */}
+          <button
+            type="button"
+            onClick={() => setIsFiltersModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-[#0f172a] hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full border border-slate-200/90 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer transition-all"
+          >
+            <SlidersHorizontal size={14} className="text-slate-500" />
+            <span>Filtros</span>
+          </button>
+
+          {/* Segmented View Switchers: Grade, Quadro, Feed, Lista, Calendário, Gantt */}
+          <div className="flex items-center p-1 bg-white dark:bg-[#0f172a] rounded-full border border-slate-200/90 dark:border-slate-800 shadow-2xs gap-0.5 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode('grade')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'grade'
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <LayoutGrid size={13} />
+              <span>Grade</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('quadro')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'quadro'
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Columns3 size={13} />
+              <span>Quadro</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('feed')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'feed'
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Smartphone size={13} />
+              <span>Feed</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('lista')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'lista'
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <List size={13} />
+              <span>Lista</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('calendario')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'calendario'
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Calendar size={13} />
+              <span>Calendário</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('gantt')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'gantt'
+                  ? 'bg-[#fab518] text-[#142142] font-black shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <AlignLeft size={13} />
+              <span>Gantt</span>
             </button>
           </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredDemands.map((demand) => {
-            const isPending = demand.columnId === 'aprovacao' || demand.approvalStatus === 'pendente' || (!demand.approvalStatus && demand.columnId === 'aprovacao');
-            const isApproved = demand.approvalStatus === 'aprovado' || demand.columnId === 'agendamento' || demand.columnId === 'concluidas';
-            const isChange = demand.approvalStatus === 'alteracao_solicitada';
-            const isRejected = demand.approvalStatus === 'reprovado';
 
-            const attachments = demand.attachments || [];
-            const mediaList = attachments.filter((a) => a.type === 'image' || a.type === 'video');
-            const mainMedia = mediaList[0];
+        {/* Right Segment: Aprovados button, Em lote, Tipos, + Novo post */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          {/* Aprovados pill button */}
+          <button
+            type="button"
+            onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'aprovado' ? 'todos' : 'aprovado')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full border text-xs font-bold cursor-pointer transition-all ${
+              selectedStatusFilter === 'aprovado'
+                ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm'
+                : 'bg-emerald-50/80 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60 hover:bg-emerald-100'
+            }`}
+          >
+            <CheckCircle2 size={14} className={selectedStatusFilter === 'aprovado' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'} />
+            <span>Aprovados ({approvedCount})</span>
+          </button>
 
-            return (
-              <div
-                key={demand.id}
-                className="bg-white dark:bg-[#0f172a] rounded-[26px] border border-slate-200/90 dark:border-slate-800 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group"
+          {/* Em lote */}
+          <button
+            type="button"
+            onClick={() => setIsBulkApprovalModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-[#0f172a] hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full border border-slate-200/90 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer transition-all"
+          >
+            <Layers size={14} className="text-slate-500" />
+            <span>Em lote</span>
+          </button>
+
+          {/* Tipos dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-[#0f172a] hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full border border-slate-200/90 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer transition-all"
+            >
+              <Sliders size={14} className="text-slate-500" />
+              <span>{selectedTypeFilter === 'todos' ? 'Tipos' : selectedTypeFilter}</span>
+            </button>
+
+            {isTypeDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-44 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xl z-30 p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                {['todos', 'Stories', 'Reels', 'Carrossel', 'Post', 'Meta Ads'].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setSelectedTypeFilter(t); setIsTypeDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-left text-xs font-bold cursor-pointer transition-colors ${
+                      selectedTypeFilter.toLowerCase() === t.toLowerCase()
+                        ? 'bg-[#fab518] text-[#142142]'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span>{t === 'todos' ? 'Todos os Tipos' : t}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* + Novo post CTA button */}
+          <button
+            type="button"
+            onClick={() => setIsNewPostModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#fab518] hover:bg-[#e6a512] text-[#142142] rounded-full text-xs font-black shadow-md shadow-[#fab518]/20 transition-all cursor-pointer hover:scale-105 active:scale-95"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            <span>Novo post</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 4. MAIN VIEW CONTENT */}
+      {viewMode === 'grade' && (
+        /* GRADE: Responsive 4-Column Card Grid exactly matching image */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pt-2">
+          {filteredDemands.length === 0 ? (
+            <div className="col-span-full py-16 text-center space-y-3 bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/80 dark:border-slate-800 p-8 shadow-xs">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-500 flex items-center justify-center mx-auto">
+                <CheckCircle2 size={24} />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                {isClientRole && (selectedStatusFilter === 'todos' || selectedStatusFilter === 'pendente')
+                  ? 'Nenhum post aguardando aprovação no momento'
+                  : 'Nenhum post encontrado com os filtros selecionados'}
+              </h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                {isClientRole && (selectedStatusFilter === 'todos' || selectedStatusFilter === 'pendente')
+                  ? 'Assim que a equipe da agência finalizar a produção e mover as demandas para a coluna "Aprovação Cliente", elas aparecerão aqui para você aprovar.'
+                  : 'Tente redefinir os filtros de status ou tipo para visualizar todos os criativos.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStatusFilter('todos');
+                  setSelectedTypeFilter('todos');
+                  setSearchQuery('');
+                }}
+                className="px-4 py-2 rounded-full bg-[#142142] dark:bg-[#fab518] text-white dark:text-[#142142] text-xs font-bold cursor-pointer"
               >
-                {/* Media Preview Header */}
-                <div className="relative aspect-video w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  {mainMedia ? (
-                    mainMedia.type === 'video' ? (
-                      <div className="w-full h-full relative flex items-center justify-center bg-slate-900 group-hover:scale-105 transition-transform duration-300">
-                        {mainMedia.thumbnailUrl ? (
-                          <img 
-                            src={mainMedia.thumbnailUrl} 
-                            alt={demand.title} 
-                            className="w-full h-full object-cover opacity-80"
-                          />
-                        ) : null}
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-xs text-white flex items-center justify-center">
-                            <Film size={22} />
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
+                Limpar Filtros
+              </button>
+            </div>
+          ) : (
+            filteredDemands.map((demand) => {
+              const isApproved = demand.approvalStatus === 'aprovado' || demand.columnId === 'agendamento' || demand.columnId === 'concluidas';
+              const isAlterations = demand.approvalStatus === 'alteracao_solicitada';
+              const isPending = !isApproved && !isAlterations;
+
+              // Slide count indication for carousels
+              const slideCount = demand.attachmentsCount || (demand.type === 'Carrossel' ? 3 : demand.type === 'Stories' ? 2 : 1);
+              const hasMultiSlides = slideCount > 1;
+
+              return (
+                <div
+                  key={demand.id}
+                  onClick={() => openPreview(demand)}
+                  className="group bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col justify-between cursor-pointer p-4 hover:border-amber-300 dark:hover:border-amber-700/60"
+                >
+                  <div className="space-y-3.5">
+                    {/* Image / Creative Mockup Box */}
+                    <div className="relative aspect-[4/3] rounded-[22px] overflow-hidden bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-inner group/img">
                       <img
-                        src={mainMedia.thumbnailUrl || mainMedia.url}
+                        src={demand.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=600'}
                         alt={demand.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-pointer"
-                        onClick={() => setPreviewMedia({ url: mainMedia.url, title: demand.title, type: mainMedia.type })}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
                       />
-                    )
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-1.5 p-4 text-center">
-                      <ImageIcon size={32} className="opacity-40" />
-                      <span className="text-[11px] font-bold">Arquivo de Criação Anexo</span>
+                      
+                      {/* Gradient overlay on bottom of image for contrast */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+
+                      {/* Top Right Multiple Slides Badge "+2" matching image */}
+                      {hasMultiSlides && (
+                        <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/65 backdrop-blur-md text-white text-[11px] font-black border border-white/20 shadow-md">
+                          +{slideCount - 1}
+                        </div>
+                      )}
+
+                      {/* Hover Quick Zoom Icon */}
+                      <button
+                        type="button"
+                        onClick={(e) => openPreview(demand, e)}
+                        className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md backdrop-blur-xs cursor-pointer hover:scale-110"
+                        title="Ver em tamanho real"
+                      >
+                        <Maximize2 size={13} />
+                      </button>
                     </div>
-                  )}
 
-                  {/* Badges on Media */}
-                  <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider bg-[#142142]/90 backdrop-blur-xs text-white shadow-xs">
-                      {demand.serviceCategory || demand.type || 'Criativo'}
-                    </span>
-                    {mediaList.length > 1 && (
-                      <span className="px-2 py-1 rounded-lg text-[10px] font-extrabold bg-black/70 backdrop-blur-xs text-white">
-                        {mediaList.length} arquivos
-                      </span>
-                    )}
-                  </div>
+                    {/* Post Title */}
+                    <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight leading-snug line-clamp-2">
+                      {demand.title}
+                    </h3>
 
-                  {/* Status Overlay Badge */}
-                  <div className="absolute top-3 right-3">
-                    {isPending && (
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-md flex items-center gap-1 animate-pulse">
-                        <Clock size={11} />
-                        <span>Aguardando Você</span>
-                      </span>
-                    )}
-                    {isApproved && (
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-white shadow-md flex items-center gap-1">
-                        <Check size={11} />
-                        <span>Aprovado</span>
-                      </span>
-                    )}
-                    {isChange && (
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-blue-500 text-white shadow-md flex items-center gap-1">
-                        <MessageSquare size={11} />
-                        <span>Ajuste em Andamento</span>
-                      </span>
-                    )}
-                    {isRejected && (
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-rose-500 text-white shadow-md flex items-center gap-1">
-                        <XCircle size={11} />
-                        <span>Reprovado</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Click to Zoom Overlay */}
-                  {mainMedia && (
-                    <button
-                      type="button"
-                      onClick={() => setPreviewMedia({ url: mainMedia.url, title: demand.title, type: mainMedia.type })}
-                      className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-[11px] backdrop-blur-xs transition-colors cursor-pointer"
-                      title="Ampliar visualização"
-                    >
-                      <Maximize2 size={13} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Card Content */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold">
-                      <span>ID: {demand.id}</span>
-                      {demand.dueDate && (
-                        <span className="flex items-center gap-1">
-                          <Calendar size={12} />
-                          <span>Prazo: {demand.dueDate}</span>
+                    {/* Status Badge */}
+                    <div>
+                      {isPending && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold border border-slate-200/60 dark:border-slate-700/60">
+                          <Clock size={12} className="text-slate-500" />
+                          <span>Pendente</span>
+                        </span>
+                      )}
+                      {isAlterations && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500 text-white text-xs font-bold shadow-xs shadow-rose-500/20">
+                          <MessageSquare size={12} />
+                          <span>Alterações solicitadas</span>
+                        </span>
+                      )}
+                      {isApproved && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500 text-white text-xs font-bold shadow-xs shadow-emerald-500/20">
+                          <CheckCircle2 size={12} />
+                          <span>Aprovado</span>
                         </span>
                       )}
                     </div>
 
-                    <h4 className="text-base font-black text-[#142142] dark:text-white leading-snug line-clamp-2">
-                      {demand.title}
-                    </h4>
-
-                    {demand.description && (
-                      <div className="p-3 bg-[#F8F9FA] dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-600 dark:text-slate-300 line-clamp-3 relative group/copy">
-                        <p className="whitespace-pre-line">{demand.description}</p>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyText(demand)}
-                          className="absolute top-1.5 right-1.5 p-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[10px] font-bold flex items-center gap-1 opacity-0 group-hover/copy:opacity-100 transition-opacity cursor-pointer shadow-2xs"
-                          title="Copiar texto/legenda"
-                        >
-                          {copiedDemandId === demand.id ? (
-                            <>
-                              <Check size={11} className="text-emerald-500" />
-                              <span className="text-emerald-500">Copiado</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy size={11} />
-                              <span>Copiar Legenda</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Previous Feedback Note if in alteration */}
-                    {demand.approvalFeedback && (
-                      <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                        <span className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 block">
-                          Sua Solicitação de Ajuste:
+                    {/* Priority & Format tags row */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Priority bullet */}
+                      <div className="flex items-center gap-1.5 text-xs font-bold">
+                        <span className={`w-2 h-2 rounded-full ${
+                          demand.priority === 'alta' || demand.priority === 'urgente' 
+                            ? 'bg-rose-500' 
+                            : demand.priority === 'media' 
+                            ? 'bg-amber-500' 
+                            : 'bg-slate-400'
+                        }`} />
+                        <span className={
+                          demand.priority === 'alta' || demand.priority === 'urgente' 
+                            ? 'text-rose-600 dark:text-rose-400' 
+                            : demand.priority === 'media' 
+                            ? 'text-amber-600 dark:text-amber-400' 
+                            : 'text-slate-500 dark:text-slate-400'
+                        }>
+                          Prioridade {demand.priority === 'alta' || demand.priority === 'urgente' ? 'Alta' : demand.priority === 'media' ? 'Média' : 'Baixa'}
                         </span>
-                        <p className="italic">"{demand.approvalFeedback}"</p>
+                      </div>
+
+                      {/* Format chip */}
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                        demand.type === 'Stories' 
+                          ? 'bg-amber-50/70 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-300/80 dark:border-amber-800' 
+                          : demand.type === 'Reels' 
+                          ? 'bg-pink-50/70 dark:bg-pink-950/30 text-pink-700 dark:text-pink-300 border-pink-300/80 dark:border-pink-800' 
+                          : demand.type === 'Carrossel' 
+                          ? 'bg-purple-50/70 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-300/80 dark:border-purple-800' 
+                          : 'bg-blue-50/70 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-300/80 dark:border-blue-800'
+                      }`}>
+                        {demand.type || 'Post'}
+                      </span>
+                    </div>
+
+                    {/* Feedback Quote Box (When alterations requested, exactly matching pink box in image) */}
+                    {(isAlterations || demand.approvalFeedback) && (
+                      <div className="p-3 rounded-2xl bg-rose-50/90 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 text-xs text-rose-700 dark:text-rose-200 leading-relaxed font-medium">
+                        “{demand.approvalFeedback || "Ajustar a cor do fundo e aumentar o logo no fechamento."}”
                       </div>
                     )}
+
+                    {/* Client Pill Badge */}
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 text-xs font-semibold">
+                      <User size={12} className="text-slate-400" />
+                      <span>{demand.client}</span>
+                    </div>
                   </div>
 
-                  {/* Feedback Inline Input Form */}
-                  {feedbackDemandId === demand.id && (
-                    <div className="p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2 animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                          O que precisa ser alterado?
-                        </span>
+                  {/* Card Bottom Divider & Date / Actions */}
+                  <div className="pt-3.5 mt-3.5 border-t border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-400">
+                      {demand.dueDate ? demand.dueDate.split('-').reverse().join('/') : '24/08/2026'}
+                    </span>
+
+                    {/* Quick Action Buttons */}
+                    <div className="flex items-center gap-1.5">
+                      {!isApproved && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setFeedbackDemandId(null);
-                            setFeedbackText('');
+                          onClick={(e) => handleApprove(demand, e)}
+                          className="px-2.5 py-1 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                          title="Aprovar post"
+                        >
+                          <Check size={12} strokeWidth={2.5} />
+                          <span>Aprovar</span>
+                        </button>
+                      )}
+
+                      {!isApproved && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFeedbackDemand(demand);
+                            setFeedbackText(demand.approvalFeedback || '');
                           }}
-                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-500 transition-colors cursor-pointer"
+                          title="Solicitar alterações"
                         >
-                          <X size={13} />
+                          <MessageSquare size={13} />
                         </button>
-                      </div>
-                      <textarea
-                        value={feedbackText}
-                        onChange={(e) => setFeedbackText(e.target.value)}
-                        placeholder="Ex: Ajustar o número de telefone no rodapé, clarear a foto de fundo..."
-                        rows={3}
-                        className="w-full bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white p-2.5 rounded-xl border border-amber-300 dark:border-amber-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        autoFocus
-                      />
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setFeedbackDemandId(null)}
-                          className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSendFeedback(demand)}
-                          disabled={!feedbackText.trim()}
-                          className="px-4 py-1.5 bg-[#142142] text-[#fab518] text-xs font-black rounded-xl hover:bg-[#1a2d59] transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                        >
-                          Enviar Ajuste
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                      )}
 
-                  {/* Rejection Inline Form */}
-                  {rejectionDemandId === demand.id && (
-                    <div className="p-3 rounded-2xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 space-y-2 animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                          Motivo da Reprovação
-                        </span>
+                      {clientObj?.phone && onOpenWhatsAppNotification && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setRejectionDemandId(null);
-                            setRejectionReason('');
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenWhatsAppNotification(demand);
                           }}
-                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          className="p-1.5 rounded-full hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-400 hover:text-[#25D366] transition-colors cursor-pointer"
+                          title="Discutir no WhatsApp"
                         >
-                          <X size={13} />
+                          <MessageCircle size={13} />
                         </button>
-                      </div>
-                      <textarea
-                        value={rejectionReason}
-                        onChange={(e) => setRejectionReason(e.target.value)}
-                        placeholder="Informe à equipe o motivo pelo qual esta demanda foi reprovada..."
-                        rows={2}
-                        className="w-full bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white p-2.5 rounded-xl border border-rose-300 dark:border-rose-700 focus:outline-none focus:ring-1 focus:ring-rose-500"
-                        autoFocus
-                      />
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setRejectionDemandId(null)}
-                          className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSendRejection(demand)}
-                          className="px-4 py-1.5 bg-rose-600 text-white text-xs font-black rounded-xl hover:bg-rose-700 transition-all cursor-pointer shadow-xs"
-                        >
-                          Confirmar Reprovação
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
-                  {/* Primary Decision Action Buttons */}
-                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    {isPending ? (
-                      <div className="flex flex-col gap-2">
-                        {/* Direct 1-Click Approve */}
-                        <button
-                          type="button"
-                          onClick={() => handleApprove(demand)}
-                          className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
-                        >
-                          <CheckCircle2 size={16} />
-                          <span>Aprovar Este Material</span>
-                        </button>
+      {/* 5. ALTERNATE VIEW MODES */}
+      {viewMode === 'quadro' && (
+        /* QUADRO: Kanban view columns */
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5 pt-2">
+          {[
+            { id: 'pendente', title: 'Aguardando Aprovação', count: pendingCount, color: 'border-amber-400 dark:border-amber-700' },
+            { id: 'alteracoes', title: 'Ajustes Solicitados', count: changesCount, color: 'border-rose-400 dark:border-rose-800' },
+            { id: 'agendamento', title: 'Agendamento (Aprovados)', count: scopedDemands.filter(d => d.columnId === 'agendamento' || (d.approvalStatus === 'aprovado' && d.columnId !== 'concluidas')).length, color: 'border-purple-400 dark:border-purple-800' },
+            { id: 'concluidas', title: 'Finalizados', count: scopedDemands.filter(d => d.columnId === 'concluidas').length, color: 'border-emerald-400 dark:border-emerald-800' },
+          ].map((col) => {
+            const items = scopedDemands.filter((d) => {
+              if (col.id === 'pendente') return d.columnId === 'aprovacao' || d.approvalStatus === 'pendente' || (!d.approvalStatus && d.columnId === 'aprovacao');
+              if (col.id === 'alteracoes') return d.approvalStatus === 'alteracao_solicitada';
+              if (col.id === 'agendamento') return d.columnId === 'agendamento' || (d.approvalStatus === 'aprovado' && d.columnId !== 'concluidas');
+              if (col.id === 'concluidas') return d.columnId === 'concluidas';
+              return false;
+            });
 
-                        <div className="grid grid-cols-2 gap-2">
-                          {/* Request Revisions */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFeedbackDemandId(demand.id);
-                              setRejectionDemandId(null);
-                            }}
-                            className="py-2 px-3 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <MessageSquare size={13} />
-                            <span>Pedir Ajustes</span>
-                          </button>
+            return (
+              <div key={col.id} className="bg-slate-50 dark:bg-slate-900/60 rounded-[24px] p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    {col.title}
+                  </h4>
+                  <span className="w-5 h-5 rounded-full bg-white dark:bg-slate-800 text-[10px] font-black flex items-center justify-center text-slate-700 dark:text-slate-200 shadow-2xs">
+                    {items.length}
+                  </span>
+                </div>
 
-                          {/* Full Screen Interactive Portal */}
-                          <button
-                            type="button"
-                            onClick={() => onOpenClientApprovalPortal(demand)}
-                            className="py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Eye size={13} />
-                            <span>Ver Detalhes</span>
-                          </button>
+                <div className="space-y-3 overflow-y-auto max-h-[600px] no-scrollbar">
+                  {items.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => openPreview(item)}
+                      className="p-3 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md cursor-pointer transition-all space-y-2"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <img
+                          src={item.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=200'}
+                          alt={item.title}
+                          className="w-11 h-11 rounded-xl object-cover shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {item.title}
+                          </p>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {item.client}
+                          </p>
                         </div>
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onOpenClientApprovalPortal(demand)}
-                          className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[#142142] dark:text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <Eye size={14} />
-                          <span>Revisar Material Completo</span>
-                        </button>
-
-                        {isApproved && (
+                      <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+                        <span>{item.type || 'Post'}</span>
+                        {item.approvalStatus !== 'aprovado' && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setFeedbackDemandId(demand.id);
-                              setRejectionDemandId(null);
-                            }}
-                            className="p-2 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors cursor-pointer"
-                            title="Solicitar alteração adicional"
+                            onClick={(e) => handleApprove(item, e)}
+                            className="px-2 py-0.5 rounded-full bg-emerald-500 text-white font-bold text-[10px]"
                           >
-                            <MessageSquare size={15} />
+                            Aprovar
                           </button>
                         )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             );
@@ -773,28 +995,850 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
         </div>
       )}
 
-      {/* Lightbox / Fullscreen Image Zoom Modal */}
-      {previewMedia && (
+      {viewMode === 'feed' && (
+        /* FEED: Instagram Grid 3x3 Simulator */
+        <div className="max-w-2xl mx-auto bg-white dark:bg-[#0f172a] rounded-[32px] border border-slate-200/90 dark:border-slate-800 shadow-xl overflow-hidden p-6 space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600">
+                <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 p-0.5 flex items-center justify-center">
+                  <span className="text-xs font-black text-[#142142] dark:text-[#fab518]">IG</span>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Feed Preview 3x3 • {currentUser.clientName || 'Instagram'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Simulação visual de harmonia da grade do feed
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-slate-400">{filteredDemands.length} posts</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {filteredDemands.slice(0, 9).map((d) => (
+              <div
+                key={d.id}
+                onClick={() => openPreview(d)}
+                className="relative aspect-square rounded-2xl overflow-hidden bg-slate-900 cursor-pointer group shadow-2xs"
+              >
+                <img
+                  src={d.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=400'}
+                  alt={d.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 text-white">
+                  <span className="text-[10px] font-black uppercase">{d.type}</span>
+                  <p className="text-xs font-bold truncate">{d.title}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'lista' && (
+        /* LISTA: Detailed table list */
+        <div className="bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 border-b border-slate-200 dark:border-slate-800 font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Post</th>
+                  <th className="py-3 px-4">Cliente</th>
+                  <th className="py-3 px-4">Formato</th>
+                  <th className="py-3 px-4">Prioridade</th>
+                  <th className="py-3 px-4">Data</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                {filteredDemands.map((d) => (
+                  <tr key={d.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3.5 px-4 flex items-center gap-3">
+                      <img
+                        src={d.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=150'}
+                        alt={d.title}
+                        className="w-10 h-10 rounded-xl object-cover shrink-0 cursor-pointer"
+                        onClick={() => openPreview(d)}
+                      />
+                      <span className="font-bold text-slate-900 dark:text-white cursor-pointer hover:underline" onClick={() => openPreview(d)}>
+                        {d.title}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">{d.client}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-bold">{d.type}</span>
+                    </td>
+                    <td className="py-3.5 px-4">{d.priority}</td>
+                    <td className="py-3.5 px-4 text-slate-400">{d.dueDate || '24/08/2026'}</td>
+                    <td className="py-3.5 px-4">
+                      <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
+                        d.approvalStatus === 'aprovado' 
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' 
+                          : d.approvalStatus === 'alteracao_solicitada' 
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' 
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      }`}>
+                        {d.approvalStatus === 'aprovado' ? 'Aprovado' : d.approvalStatus === 'alteracao_solicitada' ? 'Ajustes' : 'Pendente'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right space-x-1">
+                      {d.approvalStatus !== 'aprovado' && (
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(d)}
+                          className="px-2.5 py-1 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold cursor-pointer"
+                        >
+                          Aprovar
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openPreview(d)}
+                        className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
+                      >
+                        Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'calendario' && (
+        /* CALENDÁRIO: Monthly posts scheduling grid */
+        <div className="bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/90 dark:border-slate-800 shadow-sm p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <h3 className="text-base font-black text-slate-900 dark:text-white">
+              Calendário de Publicações • Agosto/Setembro 2026
+            </h3>
+            <span className="text-xs font-bold text-slate-400">{filteredDemands.length} posts agendados</span>
+          </div>
+
+          <div className="grid grid-cols-7 gap-2 text-center text-xs">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+              <div key={day} className="py-1 font-bold text-slate-400 uppercase tracking-wider">{day}</div>
+            ))}
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+              const postsOnDay = filteredDemands.filter((d) => {
+                const parts = (d.dueDate || '').split('-');
+                return parts.length === 3 && parseInt(parts[2], 10) === day;
+              });
+
+              return (
+                <div
+                  key={day}
+                  className={`min-h-[85px] p-2 rounded-2xl border text-left flex flex-col justify-between transition-colors ${
+                    postsOnDay.length > 0 
+                      ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800' 
+                      : 'bg-slate-50/50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800/60'
+                  }`}
+                >
+                  <span className="text-xs font-black text-slate-500">{day}</span>
+                  <div className="space-y-1">
+                    {postsOnDay.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => openPreview(p)}
+                        className="text-[10px] font-bold p-1 rounded-lg bg-white dark:bg-slate-800 text-[#142142] dark:text-[#fab518] truncate cursor-pointer shadow-2xs hover:scale-102"
+                      >
+                        {p.title}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'gantt' && (
+        /* GANTT: Timeline schedule */
+        <div className="bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/90 dark:border-slate-800 shadow-sm p-6 space-y-4">
+          <h3 className="text-base font-black text-slate-900 dark:text-white">
+            Cronograma & Linha do Tempo (Gantt)
+          </h3>
+          <div className="space-y-3 pt-2">
+            {filteredDemands.map((d, idx) => (
+              <div key={d.id} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">{d.title}</span>
+                  <span className="text-[11px] text-slate-400">{d.client} • {d.type}</span>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-1/2">
+                  <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full ${
+                        d.approvalStatus === 'aprovado' ? 'bg-emerald-500' : 'bg-[#fab518]'
+                      }`}
+                      style={{ width: `${Math.min(100, (idx + 2) * 20)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-slate-400 whitespace-nowrap">{d.dueDate || '24/08/2026'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* DESEMPENHO TAB */}
+      {topNavTab === 'desempenho' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-[#0f172a] rounded-[24px] p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Total Criativos</span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white mt-1 block">{scopedDemands.length}</span>
+                <span className="text-[11px] font-semibold text-slate-500">No fluxo de trabalho</span>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                <Layers size={22} />
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#0f172a] rounded-[24px] p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Aguardando Validação</span>
+                <span className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1 block">{pendingCount}</span>
+                <span className="text-[11px] font-semibold text-amber-600/80">Pendentes com o cliente</span>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center">
+                <Clock size={22} />
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#0f172a] rounded-[24px] p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Aprovados</span>
+                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">{approvedCount}</span>
+                <span className="text-[11px] font-semibold text-emerald-600/80">Prontos para publicação</span>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
+                <CheckCircle2 size={22} />
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#0f172a] rounded-[24px] p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Ajustes Solicitados</span>
+                <span className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 block">{changesCount}</span>
+                <span className="text-[11px] font-semibold text-rose-600/80">Retornados para equipe</span>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-600 flex items-center justify-center">
+                <MessageSquare size={22} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTAS TAB */}
+      {topNavTab === 'notas' && (
+        <div className="bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/90 dark:border-slate-800 p-6 space-y-4 animate-in fade-in duration-200 shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">Notas & Alinhamentos de Conteúdo</h3>
+              <p className="text-xs text-slate-400">Instruções de tom de voz, regras da marca e sugestões de pautas</p>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-xs">
+              Help Ideias Digitais
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800 space-y-2">
+              <span className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-wide">Tom de Voz</span>
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                Manter comunicação dinâmica, moderna e focada em resultados. Use chamadas assertivas no início dos stories e reels.
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800 space-y-2">
+              <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">Padrões Visuais</span>
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                Priorizar contraste alto, tipografia limpa sem serifa nos títulos e aplicar sempre o logotipo no canto superior ou fechamento.
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-sky-50/70 dark:bg-sky-950/20 border border-sky-200/80 dark:border-sky-800 space-y-2">
+              <span className="text-xs font-black text-sky-800 dark:text-sky-300 uppercase tracking-wide">Ciclo de Aprovação</span>
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                Posts semanais enviados até terça-feira para aprovação do cliente até quinta-feira às 18h antes da publicação.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHAT TAB */}
+      {topNavTab === 'chat' && (
+        <div className="bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/90 dark:border-slate-800 p-6 space-y-4 animate-in fade-in duration-200 shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">Central de Comunicação & WhatsApp</h3>
+              <p className="text-xs text-slate-400">Contate os responsáveis pelos criativos diretamente</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+            {clients.slice(0, 6).map((c) => {
+              const clientPending = scopedDemands.filter(d => (d.client || '').toLowerCase() === c.name.toLowerCase() && (d.columnId === 'aprovacao' || d.approvalStatus === 'pendente')).length;
+              const phoneClean = (c.phone || '11999999999').replace(/[^0-9]/g, '');
+              const waUrl = `https://wa.me/55${phoneClean}?text=${encodeURIComponent(`Olá ${c.name}! Tudo bem? Temos ${clientPending} materiais no seu Portal de Aprovação da Help Ideias Digitais para você conferir.`)}`;
+
+              return (
+                <div key={c.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">{c.name}</h4>
+                    <p className="text-[11px] text-slate-400">{c.phone || '(11) 98765-4321'}</p>
+                    <span className="text-[10px] font-bold text-amber-500">{clientPending} pendentes</span>
+                  </div>
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white shadow-xs cursor-pointer flex items-center justify-center shrink-0 transition-transform hover:scale-105"
+                    title="Conversar no WhatsApp"
+                  >
+                    <MessageCircle size={16} />
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 6. MODALS */}
+
+      {/* LIGHTBOX / FULLSCREEN PREVIEW MODAL */}
+      {previewDemand && (
         <div 
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setPreviewMedia(null)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setPreviewDemand(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
-            <button
-              type="button"
-              onClick={() => setPreviewMedia(null)}
-              className="absolute -top-12 right-0 p-2 text-white hover:text-slate-300 cursor-pointer"
+          <div 
+            className="bg-white dark:bg-[#0f172a] w-full max-w-4xl rounded-[32px] overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Left Media Box */}
+            <div className="md:w-3/5 bg-slate-950 flex items-center justify-center relative p-4 min-h-[350px]">
+              <img
+                src={previewDemand.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=800'}
+                alt={previewDemand.title}
+                className="max-h-[75vh] w-auto object-contain rounded-2xl shadow-xl"
+              />
+              <button
+                type="button"
+                onClick={() => setPreviewDemand(null)}
+                className="absolute top-4 left-4 p-2 rounded-full bg-black/60 text-white hover:bg-black/90 cursor-pointer md:hidden"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Right Details Box */}
+            <div className="md:w-2/5 p-6 flex flex-col justify-between space-y-4 overflow-y-auto">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-300/60">
+                    {previewDemand.type || 'Post'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDemand(null)}
+                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer hidden md:block"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                  {previewDemand.title}
+                </h2>
+
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <User size={14} />
+                  <span>{previewDemand.client}</span>
+                  <span>•</span>
+                  <span>{previewDemand.dueDate ? previewDemand.dueDate.split('-').reverse().join('/') : '24/08/2026'}</span>
+                </div>
+
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {previewDemand.description || 'Criativo desenvolvido pela equipe da Help Ideias Digitais para publicação nas redes sociais da sua empresa.'}
+                </p>
+
+                {previewDemand.approvalFeedback && (
+                  <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-200">
+                    <p className="font-bold mb-1">Último ajuste solicitado:</p>
+                    <p>“{previewDemand.approvalFeedback}”</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons in Modal */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleApprove(previewDemand);
+                      setPreviewDemand(null);
+                    }}
+                    className="flex-1 py-3 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>Aprovar Agora</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFeedbackDemand(previewDemand);
+                      setFeedbackText(previewDemand.approvalFeedback || '');
+                      setPreviewDemand(null);
+                    }}
+                    className="px-4 py-3 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
+                  >
+                    Solicitar Ajuste
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FEEDBACK / ALTERAÇÃO MODAL */}
+      {feedbackDemand && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setFeedbackDemand(null)}
+        >
+          <div 
+            className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-[28px] p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                Solicitar Ajuste no Criativo
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setFeedbackDemand(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Descreva com detalhes o que a equipe da Help Ideias Digitais deve alterar em <strong>"{feedbackDemand.title}"</strong>:
+            </p>
+
+            <form onSubmit={handleSendFeedback} className="space-y-3">
+              <textarea
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="Ex: Ajustar a cor do fundo, trocar a foto da lâmina 2 e aumentar o logo no fechamento..."
+                rows={4}
+                required
+                className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#fab518]"
+              />
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setFeedbackDemand(null)}
+                  className="px-4 py-2 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-full bg-[#142142] dark:bg-[#fab518] text-white dark:text-[#142142] text-xs font-black cursor-pointer shadow-md"
+                >
+                  Enviar Alteração
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BULK APPROVAL MODAL */}
+      {isBulkApprovalModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsBulkApprovalModalOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-[28px] p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500 flex items-center justify-center mx-auto">
+              <CheckCircle2 size={24} />
+            </div>
+
+            <h3 className="text-lg font-black text-slate-900 dark:text-white">
+              Aprovação em Lote
+            </h3>
+
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Deseja aprovar todos os <strong>{pendingCount} posts pendentes</strong> de uma só vez? Eles serão movidos imediatamente para a coluna Agendamento.
+            </p>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsBulkApprovalModalOpen(false)}
+                className="px-4 py-2 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkApprove}
+                disabled={pendingCount === 0}
+                className="px-6 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-black text-xs cursor-pointer shadow-md"
+              >
+                Confirmar e Aprovar Todos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOVO POST MODAL */}
+      {isNewPostModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsNewPostModalOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-[#0f172a] w-full max-w-lg rounded-[28px] p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                Solicitar / Cadastrar Novo Post
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsNewPostModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setIsNewPostModalOpen(false);
+                setActionSuccessNotice({
+                  id: 'new-post',
+                  message: `Demanda de post "${newPostTitle || 'Novo Post'}" cadastrada com sucesso!`,
+                  type: 'success',
+                });
+                setNewPostTitle('');
+                setNewPostDescription('');
+              }}
+              className="space-y-3"
             >
-              <X size={24} />
-            </button>
-            <img
-              src={previewMedia.url}
-              alt={previewMedia.title}
-              className="max-h-[80vh] w-auto rounded-2xl object-contain shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <div className="mt-3 text-center text-white text-xs font-bold">
-              {previewMedia.title}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Título do Post / Tema
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newPostTitle}
+                  onChange={(e) => setNewPostTitle(e.target.value)}
+                  placeholder="Ex: Post lançamento produto de verão"
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#fab518]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Formato
+                  </label>
+                  <select
+                    value={newPostType}
+                    onChange={(e) => setNewPostType(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white"
+                  >
+                    <option value="Stories">Stories</option>
+                    <option value="Reels">Reels</option>
+                    <option value="Carrossel">Carrossel</option>
+                    <option value="Post">Post Estático</option>
+                    <option value="Meta Ads">Meta Ads</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Data Desejada
+                  </label>
+                  <input
+                    type="date"
+                    defaultValue="2026-08-28"
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Briefing / Instruções para a Agência
+                </label>
+                <textarea
+                  value={newPostDescription}
+                  onChange={(e) => setNewPostDescription(e.target.value)}
+                  placeholder="Explique o objetivo, chamada para ação, promoções ou referências visuais desejadas..."
+                  rows={3}
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsNewPostModalOpen(false)}
+                  className="px-4 py-2 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-full bg-[#fab518] text-[#142142] text-xs font-black cursor-pointer shadow-md"
+                >
+                  Criar Post
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FILTROS AVANÇADOS MODAL */}
+      {isFiltersModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsFiltersModalOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-[28px] p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                Filtros de Criativos
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsFiltersModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Busca por Palavra-Chave
+                </label>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filtrar por título, texto ou cliente..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs"
+                  />
+                </div>
+              </div>
+
+              {!isClientRole && (
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Filtrar por Cliente
+                  </label>
+                  <select
+                    value={selectedClientFilter}
+                    onChange={(e) => setSelectedClientFilter(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs"
+                  >
+                    <option value="todos">Todos os Clientes</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStatusFilter('todos');
+                  setSelectedTypeFilter('todos');
+                  setSelectedClientFilter('todos');
+                  setSearchQuery('');
+                  setIsFiltersModalOpen(false);
+                }}
+                className="text-xs font-bold text-rose-500 hover:underline cursor-pointer"
+              >
+                Limpar Tudo
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsFiltersModalOpen(false)}
+                className="px-5 py-2 rounded-full bg-[#142142] dark:bg-[#fab518] text-white dark:text-[#142142] text-xs font-black cursor-pointer shadow-md"
+              >
+                Aplicar Filtros
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CLIENT PASSWORD MANAGER MODAL */}
+      {isPasswordManagerModalOpen && (
+        <ClientPasswordManagerModal
+          isOpen={isPasswordManagerModalOpen}
+          onClose={() => setIsPasswordManagerModalOpen(false)}
+          clients={clients}
+          onUpdateClient={onUpdateClient || (() => {})}
+        />
+      )}
+
+      {/* CLIENT SIMULATOR MODAL */}
+      {isSimulatorModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setIsSimulatorModalOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-[#0f172a] w-full max-w-lg rounded-[32px] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <Smartphone size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">Simulador do Portal do Cliente</h3>
+                  <p className="text-[11px] text-slate-400">Visão real do cliente ao acessar pelo celular ou computador</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSimulatorModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Device Switcher */}
+            <div className="px-5 pt-3 pb-1 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveSimulatorDevice('mobile')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeSimulatorDevice === 'mobile'
+                    ? 'bg-[#142142] dark:bg-[#fab518] text-white dark:text-[#142142]'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                }`}
+              >
+                <Smartphone size={13} />
+                <span>Mobile (iPhone)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSimulatorDevice('desktop')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeSimulatorDevice === 'desktop'
+                    ? 'bg-[#142142] dark:bg-[#fab518] text-white dark:text-[#142142]'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                }`}
+              >
+                <Monitor size={13} />
+                <span>Desktop (Navegador)</span>
+              </button>
+            </div>
+
+            {/* Frame Body */}
+            <div className="p-4 overflow-y-auto flex items-center justify-center bg-slate-100 dark:bg-slate-950/60">
+              <div className={`transition-all duration-300 ${
+                activeSimulatorDevice === 'mobile'
+                  ? 'w-[320px] rounded-[36px] border-4 border-slate-800 bg-white dark:bg-[#0f172a] p-4 shadow-xl space-y-3'
+                  : 'w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f172a] p-4 shadow-lg space-y-3'
+              }`}>
+                {/* Simulated Notch */}
+                {activeSimulatorDevice === 'mobile' && (
+                  <div className="w-24 h-4 bg-slate-800 rounded-full mx-auto mb-2" />
+                )}
+
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-[11px] font-black text-[#142142] dark:text-[#fab518]">Help Ideias Digitais</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-bold">Portal Ativo</span>
+                </div>
+
+                {filteredDemands.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-900">
+                      <img
+                        src={filteredDemands[0].thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=400'}
+                        alt={filteredDemands[0].title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 dark:text-white leading-tight">{filteredDemands[0].title}</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{filteredDemands[0].client} • {filteredDemands[0].type}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleApprove(filteredDemands[0]);
+                          setIsSimulatorModalOpen(false);
+                        }}
+                        className="py-1.5 px-3 rounded-xl bg-emerald-500 text-white text-[11px] font-bold text-center cursor-pointer shadow-xs"
+                      >
+                        Aprovar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSimulatorModalOpen(false);
+                          setFeedbackDemand(filteredDemands[0]);
+                        }}
+                        className="py-1.5 px-3 rounded-xl bg-rose-500/10 text-rose-600 text-[11px] font-bold text-center cursor-pointer"
+                      >
+                        Pedir Ajuste
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    Nenhum post em aprovação no momento.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

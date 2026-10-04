@@ -62,7 +62,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.role === 'cliente') {
-          return 'demandas';
+          return 'aprovacoes';
         }
       }
     } catch {}
@@ -78,6 +78,20 @@ export function Layout({ children, onLogout }: LayoutProps) {
     description?: string;
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Limpeza e inicialização oficial para o lançamento limpo do sistema
+  try {
+    const launchCleanKey = 'agency_system_official_launch_v1';
+    if (!localStorage.getItem(launchCleanKey)) {
+      localStorage.setItem(launchCleanKey, 'true');
+      localStorage.setItem('agency_clients', JSON.stringify([]));
+      localStorage.setItem('agency_demands', JSON.stringify([]));
+      localStorage.setItem('agency_demands_v2', JSON.stringify([]));
+      localStorage.setItem('agency_invoices', JSON.stringify([]));
+      localStorage.setItem('agency_proposals', JSON.stringify([]));
+      localStorage.setItem('agency_team_members', JSON.stringify(initialTeamMembers));
+    }
+  } catch {}
 
   // Main state data with local persistence for production readiness
   const [demands, setDemands] = useState<DemandItem[]>(() => {
@@ -97,11 +111,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.map(c => c.id === 'client-piloto-3405' ? { ...c, monthlyFee: 0 } : c);
+          return parsed;
         }
       }
     } catch {}
-    return initialClients.map(c => c.id === 'client-piloto-3405' ? { ...c, monthlyFee: 0 } : c);
+    return initialClients;
   });
 
   const [services, setServices] = useState<Service[]>(() => {
@@ -128,30 +142,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
     try {
-      const mockIds = new Set(['FAT-2026-001', 'FAT-2026-002', 'FAT-2026-003', 'FAT-2026-004']);
-      // Limpeza de inicialização/lançamento do sistema: remove faturas de teste e mock
-      const launchCleanup = localStorage.getItem('agency_invoices_launch_clean_v1');
-      if (!launchCleanup) {
-        localStorage.setItem('agency_invoices_launch_clean_v1', 'true');
-        const saved = localStorage.getItem('agency_invoices');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            const clean = parsed.filter((inv: any) => inv && inv.id && !mockIds.has(inv.id));
-            localStorage.setItem('agency_invoices', JSON.stringify(clean));
-            return clean.map(normalizeInvoice);
-          }
-        }
-        localStorage.setItem('agency_invoices', JSON.stringify([]));
-        return [];
-      }
-
       const saved = localStorage.getItem('agency_invoices');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const clean = parsed.filter((inv: any) => inv && inv.id && !mockIds.has(inv.id));
-          return clean.map(normalizeInvoice);
+          return parsed.map(normalizeInvoice);
         }
       }
     } catch {}
@@ -163,7 +158,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       const saved = localStorage.getItem('agency_team_members');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const clean = parsed.filter(m => !['mem-2', 'mem-3', 'mem-4'].includes(m.id));
+          if (clean.length > 0) return clean;
+        }
       }
     } catch {}
     return initialTeamMembers;
@@ -286,7 +284,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   useEffect(() => {
     if (effectiveUser.role === 'cliente') {
       if (currentPage !== 'demandas' && currentPage !== 'aprovacoes') {
-        setCurrentPage('demandas');
+        setCurrentPage('aprovacoes');
       }
       const clientName = effectiveUser.clientName || effectiveUser.name;
       if (clientName && selectedClientForKanban !== clientName) {
@@ -577,7 +575,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
         const remoteData = await serverDbService.fetchDatabase();
         if (!isMounted || !remoteData) return;
 
-        if (remoteData.clients && Array.isArray(remoteData.clients) && remoteData.clients.length > 0) {
+        if (remoteData.clients && Array.isArray(remoteData.clients)) {
           setClients((prev) => {
             if (
               prev.length === remoteData.clients!.length &&
@@ -597,7 +595,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           const cleanRemote = remoteData.demands.filter((d) => !deletedIds.has(d.id));
           const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 4000);
 
-          if (!isRecentlyEditedLocally && cleanRemote.length > 0) {
+          if (!isRecentlyEditedLocally) {
             setDemands((prev) => {
               const cleanPrev = prev.filter((d) => !deletedIds.has(d.id));
               if (
@@ -632,14 +630,15 @@ export function Layout({ children, onLogout }: LayoutProps) {
           }
         }
 
-        if (remoteData.teamMembers && Array.isArray(remoteData.teamMembers) && remoteData.teamMembers.length > 0) {
+        if (remoteData.teamMembers && Array.isArray(remoteData.teamMembers)) {
           const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalTeamMemberUpdateRef.current < 5000);
           if (!isRecentlyEditedLocally) {
             setTeamMembers((prev) => {
               const remoteMap = new Map(remoteData.teamMembers!.map((rm) => [rm.id, rm]));
               const deletedIds = getDeletedTeamMemberIds();
-              const cleanRemote = remoteData.teamMembers!.filter((rm) => !deletedIds.has(rm.id));
-              const localPending = prev.filter((lm) => !deletedIds.has(lm.id) && !remoteMap.has(lm.id));
+              const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
+              const cleanRemote = remoteData.teamMembers!.filter((rm) => !deletedIds.has(rm.id) && !mockIds.has(rm.id));
+              const localPending = prev.filter((lm) => !deletedIds.has(lm.id) && !mockIds.has(lm.id) && !remoteMap.has(lm.id));
               const merged = deduplicateTeamMembers([...cleanRemote, ...localPending]);
 
               if (
@@ -736,12 +735,12 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
         if (remoteData) {
           // 1. CLIENTES (Mescla e aplica dados reais)
-          if (remoteData.clients && Array.isArray(remoteData.clients) && remoteData.clients.length > 0) {
+          if (remoteData.clients && Array.isArray(remoteData.clients)) {
             const remoteMap = new Map(remoteData.clients.map((c) => [c.id, c]));
             const mergedClients = [...remoteData.clients];
             let hasNewLocal = false;
 
-            if (localClients.length > 0) {
+            if (localClients.length > 0 && remoteData.clients.length > 0) {
               for (const loc of localClients) {
                 if (!remoteMap.has(loc.id)) {
                   mergedClients.push(loc);
@@ -750,29 +749,24 @@ export function Layout({ children, onLogout }: LayoutProps) {
               }
             }
 
-            const sanitizedClients = mergedClients.map((c) => (c.id === 'client-piloto-3405' ? { ...c, monthlyFee: 0 } : c));
-            setClients(sanitizedClients);
+            setClients(mergedClients);
             try {
-              localStorage.setItem('agency_clients', JSON.stringify(sanitizedClients));
+              localStorage.setItem('agency_clients', JSON.stringify(mergedClients));
             } catch {}
 
             if (hasNewLocal) {
               needsServerPush = true;
-              pushPayload.clients = sanitizedClients;
+              pushPayload.clients = mergedClients;
             }
-          } else if (localClients.length > 0) {
-            setClients(localClients);
-            needsServerPush = true;
-            pushPayload.clients = localClients;
           }
 
           // 2. DEMANDAS (Mescla e aplica dados reais)
-          if (remoteData.demands && Array.isArray(remoteData.demands) && remoteData.demands.length > 0) {
+          if (remoteData.demands && Array.isArray(remoteData.demands)) {
             const remoteDemandMap = new Map(remoteData.demands.map((d) => [d.id, d]));
             const mergedDemands = [...remoteData.demands];
             let hasNewLocalDemand = false;
 
-            if (localDemands.length > 0) {
+            if (localDemands.length > 0 && remoteData.demands.length > 0) {
               for (const loc of localDemands) {
                 if (!remoteDemandMap.has(loc.id)) {
                   mergedDemands.push(loc);
@@ -790,17 +784,14 @@ export function Layout({ children, onLogout }: LayoutProps) {
               needsServerPush = true;
               pushPayload.demands = mergedDemands;
             }
-          } else if (localDemands.length > 0) {
-            setDemands(localDemands);
-            needsServerPush = true;
-            pushPayload.demands = localDemands;
           }
 
           // 3. EQUIPE (TEAM MEMBERS)
           if (remoteData.teamMembers && Array.isArray(remoteData.teamMembers) && remoteData.teamMembers.length > 0) {
             setTeamMembers((prevLocal) => {
               const deletedIds = getDeletedTeamMemberIds();
-              const cleanRemote = remoteData.teamMembers!.filter((rm) => !deletedIds.has(rm.id));
+              const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
+              const cleanRemote = remoteData.teamMembers!.filter((rm) => !deletedIds.has(rm.id) && !mockIds.has(rm.id));
               const remoteMap = new Map(cleanRemote.map((rm) => [rm.id, rm]));
 
               const updatedRemote = cleanRemote.map((rm) => {
@@ -816,8 +807,8 @@ export function Layout({ children, onLogout }: LayoutProps) {
                 };
               });
 
-              // PRESERVAR colaboradores locais que ainda não estão no servidor
-              const localOnly = (prevLocal || []).filter((lm) => !deletedIds.has(lm.id) && !remoteMap.has(lm.id));
+              // PRESERVAR apenas colaboradores locais válidos (que não sejam os antigos mocks removidos)
+              const localOnly = (prevLocal || []).filter((lm) => !deletedIds.has(lm.id) && !mockIds.has(lm.id) && !remoteMap.has(lm.id));
               const merged = deduplicateTeamMembers([...updatedRemote, ...localOnly]);
 
               if (localOnly.length > 0) {
@@ -1519,13 +1510,24 @@ export function Layout({ children, onLogout }: LayoutProps) {
     const demand = demands.find((d) => d.id === demandId);
     if (!demand) return;
 
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     if (action === 'aprovado') {
       const approvedDemand: DemandItem = {
         ...demand,
         approvalStatus: 'aprovado',
-        approvalAnsweredAt: 'Agora mesmo',
+        approvalAnsweredAt: timeNow || 'Agora mesmo',
         columnId: 'agendamento',
         statusLabel: 'Aprovado pelo Cliente',
+        history: [
+          ...(demand.history || []),
+          {
+            id: `hist-${Date.now()}`,
+            text: `Post aprovado pelo cliente. Demanda movida automaticamente para a coluna Agendamento às ${timeNow}.`,
+            timestamp: timeNow,
+            author: demand.client ? `Cliente (${demand.client})` : 'Cliente',
+          },
+        ],
       };
 
       setDemands((prev) => {
@@ -1538,6 +1540,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       });
       supabaseService.upsertDemand(approvedDemand);
 
+      if (clientPortalDemand?.id === demandId) {
+        setClientPortalDemand(approvedDemand);
+      }
+
       const newActivity: ClientActivity = {
         id: `act-${Date.now()}`,
         clientName: demand.client,
@@ -1545,7 +1551,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
         demandTitle: demand.title,
         projectOrCampaign: demand.clientProject,
         type: 'client_approval',
-        description: `O cliente APROVOU o material da demanda "${demand.title}" via Portal. Movido para Agendamento.`,
+        description: `O cliente APROVOU o post "${demand.title}". Demanda movida para a coluna Agendamento.`,
         actor: {
           name: demand.client,
           avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
@@ -1573,10 +1579,19 @@ export function Layout({ children, onLogout }: LayoutProps) {
       const rejectedDemand: DemandItem = {
         ...demand,
         approvalStatus: 'reprovado',
-        approvalAnsweredAt: 'Agora mesmo',
+        approvalAnsweredAt: timeNow || 'Agora mesmo',
         columnId: 'producao',
         statusLabel: 'Reprovado pelo Cliente',
         approvalFeedback: feedback,
+        history: [
+          ...(demand.history || []),
+          {
+            id: `hist-${Date.now()}`,
+            text: `Material reprovado pelo cliente: "${feedback || 'Sem justificativa'}". Retornou para Produção.`,
+            timestamp: timeNow,
+            author: demand.client ? `Cliente (${demand.client})` : 'Cliente',
+          },
+        ],
       };
 
       setDemands((prev) => {
@@ -1588,6 +1603,9 @@ export function Layout({ children, onLogout }: LayoutProps) {
         return next;
       });
       supabaseService.upsertDemand(rejectedDemand);
+      if (clientPortalDemand?.id === demandId) {
+        setClientPortalDemand(rejectedDemand);
+      }
 
       const newActivity: ClientActivity = {
         id: `act-${Date.now()}`,
@@ -1626,10 +1644,19 @@ export function Layout({ children, onLogout }: LayoutProps) {
         ...demand,
         approvalStatus: 'alteracao_solicitada',
         approvalFeedback: feedback,
-        approvalAnsweredAt: 'Agora mesmo',
+        approvalAnsweredAt: timeNow || 'Agora mesmo',
         columnId: 'producao',
         statusLabel: 'Ajuste Solicitado',
         commentsCount: (demand.commentsCount || 0) + 1,
+        history: [
+          ...(demand.history || []),
+          {
+            id: `hist-${Date.now()}`,
+            text: `Cliente solicitou alteração: "${feedback || 'Ajustes no criativo'}". Retornou para Produção.`,
+            timestamp: timeNow,
+            author: demand.client ? `Cliente (${demand.client})` : 'Cliente',
+          },
+        ],
       };
 
       setDemands((prev) => {
@@ -1641,6 +1668,9 @@ export function Layout({ children, onLogout }: LayoutProps) {
         return next;
       });
       supabaseService.upsertDemand(changeDemand);
+      if (clientPortalDemand?.id === demandId) {
+        setClientPortalDemand(changeDemand);
+      }
 
       const newActivity: ClientActivity = {
         id: `act-${Date.now()}`,
@@ -2211,16 +2241,19 @@ export function Layout({ children, onLogout }: LayoutProps) {
         );
       case 'portal-cliente':
         return (
-          <PortalClienteView
+          <ClientApprovalsView
             demands={demands}
             clients={clients}
+            currentUser={effectiveUser}
             onClientApprovalAction={handleClientApprovalAction}
+            onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}
+            onNavigateToPortal={() => setCurrentPage('demandas')}
             onOpenWhatsAppNotification={(demand) => setWhatsAppDemand(demand)}
+            onUpdateClient={handleUpdateClient}
             onOpenDemandModal={(demand) => {
               setSelectedDemandIdForKanban(demand.id);
               setCurrentPage('demandas');
             }}
-            onUpdateClient={handleUpdateClient}
             onSelectClientDemands={(clientName) => {
               setSelectedClientForKanban(clientName);
               setKanbanFilterTrigger((prev) => prev + 1);
@@ -2262,6 +2295,16 @@ export function Layout({ children, onLogout }: LayoutProps) {
             onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}
             onNavigateToPortal={() => setCurrentPage('demandas')}
             onOpenWhatsAppNotification={(demand) => setWhatsAppDemand(demand)}
+            onUpdateClient={handleUpdateClient}
+            onOpenDemandModal={(demand) => {
+              setSelectedDemandIdForKanban(demand.id);
+              setCurrentPage('demandas');
+            }}
+            onSelectClientDemands={(clientName) => {
+              setSelectedClientForKanban(clientName);
+              setKanbanFilterTrigger((prev) => prev + 1);
+              setCurrentPage('demandas');
+            }}
           />
         );
       default:
@@ -2602,13 +2645,13 @@ export default function App() {
             localStorage.setItem('agency_proposals', JSON.stringify(remoteData.proposals));
           } catch {}
         }
-        if (remoteData.clients && Array.isArray(remoteData.clients) && remoteData.clients.length > 0) {
+        if (remoteData.clients && Array.isArray(remoteData.clients)) {
           setPortalClients(remoteData.clients);
           try {
             localStorage.setItem('agency_clients', JSON.stringify(remoteData.clients));
           } catch {}
         }
-        if (remoteData.demands && Array.isArray(remoteData.demands) && remoteData.demands.length > 0) {
+        if (remoteData.demands && Array.isArray(remoteData.demands)) {
           setPortalDemands(remoteData.demands);
           try {
             localStorage.setItem('agency_demands', JSON.stringify(remoteData.demands));
@@ -2774,7 +2817,7 @@ export default function App() {
         if (action === 'aprovado') {
           return {
             ...d,
-            columnId: 'concluidas' as KanbanColumnId,
+            columnId: 'agendamento' as KanbanColumnId,
             statusLabel: 'Aprovado pelo Cliente',
             approvalStatus: 'aprovado' as const,
             approvalAnsweredAt: timeNow,
@@ -2782,7 +2825,7 @@ export default function App() {
               ...(d.history || []),
               {
                 id: `hist-${Date.now()}`,
-                text: `Material aprovado diretamente pelo cliente via Portal Seguro às ${timeNow}.`,
+                text: `Material aprovado diretamente pelo cliente via Portal Seguro às ${timeNow}. Demanda movida para a coluna Agendamento.`,
                 timestamp: timeNow,
                 author: 'Cliente (Portal Web)',
               },

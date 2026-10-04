@@ -333,13 +333,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: NavItemConfig[] = isClientRole
     ? [
         {
-          id: 'demandas',
-          label: 'Portal do Cliente',
-          icon: Sparkles,
-          badge: totalActiveDemands > 0 ? totalActiveDemands : undefined,
-          badgeColor: 'bg-[#fab518] text-[#142142]',
-        },
-        {
           id: 'aprovacoes',
           label: 'Aprovações',
           icon: CheckCircle2,
@@ -430,14 +423,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="w-12 h-12 rounded-full bg-slate-100/90 dark:bg-slate-800/90 flex items-center justify-center shadow-xs border border-slate-200/60 dark:border-slate-700/60 transition-transform hover:scale-105">
                   <HelpLogo 
                     variant="icon" 
-                    onClick={() => onSelectPage(isClientRole ? 'demandas' : 'inicio')} 
+                    onClick={() => onSelectPage(isClientRole ? 'aprovacoes' : 'inicio')} 
                   />
                 </div>
               ) : (
                 <HelpLogo 
                   variant="full" 
                   size="lg" 
-                  onClick={() => onSelectPage(isClientRole ? 'demandas' : 'inicio')} 
+                  onClick={() => onSelectPage(isClientRole ? 'aprovacoes' : 'inicio')} 
                   className="py-1"
                 />
               )}
@@ -903,7 +896,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Current User Card */}
           <div 
-            onClick={() => onSelectPage(isClientRole ? 'demandas' : 'equipe')}
+            onClick={() => onSelectPage(isClientRole ? 'aprovacoes' : 'equipe')}
             className={`flex items-center justify-between rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer group/user ${isCollapsed ? 'justify-center p-1.5' : 'p-2'}`}
             title={isCollapsed ? `${activeUser.name} - ${activeUser.roleLabel}` : isClientRole ? 'Área Exclusiva do Cliente' : 'Clique para ver o perfil na Equipe'}
           >

@@ -29,12 +29,28 @@ export const HelpLogo: React.FC<HelpLogoProps> = ({
       return null;
     }
   });
+  const [customLogoIconLight, setCustomLogoIconLight] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('agency_custom_logo_icon_light') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [customLogoIconDark, setCustomLogoIconDark] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('agency_custom_logo_icon_dark') || null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     const handleUpdate = () => {
       try {
         setCustomLogoLight(localStorage.getItem('agency_custom_logo_light') || localStorage.getItem('agency_custom_logo') || null);
         setCustomLogoDark(localStorage.getItem('agency_custom_logo_dark') || null);
+        setCustomLogoIconLight(localStorage.getItem('agency_custom_logo_icon_light') || null);
+        setCustomLogoIconDark(localStorage.getItem('agency_custom_logo_icon_dark') || null);
         setImgError(false);
       } catch {}
     };
@@ -64,7 +80,10 @@ export const HelpLogo: React.FC<HelpLogoProps> = ({
   };
 
   if (variant === 'icon') {
-    const iconSrc = (isDark ? customLogoDark : null) || customLogoLight || '/icone-help.png';
+    const iconSrc = (isDark ? (customLogoIconDark || customLogoIconLight || customLogoDark) : null) || 
+      customLogoIconLight || 
+      customLogoLight || 
+      '/icone-help.png';
     return (
       <div 
         onClick={onClick}

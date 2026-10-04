@@ -78,7 +78,7 @@ export const ClientApprovalPortalModal: React.FC<ClientApprovalPortalModalProps>
 
   const handleApproveClick = () => {
     onApprove(demand.id);
-    setActionSuccessMessage('Material Aprovado com sucesso! A equipe da agência já foi notificada para prosseguir com o agendamento e publicação.');
+    setActionSuccessMessage('Material Aprovado com sucesso! A agência foi avisada.');
     setIsChangeFormOpen(false);
     setIsRejectConfirmOpen(false);
   };
@@ -163,10 +163,10 @@ export const ClientApprovalPortalModal: React.FC<ClientApprovalPortalModalProps>
               Fechar aviso
             </button>
           </div>
-        ) : demand.approvalStatus === 'aprovado' ? (
+        ) : (demand.approvalStatus === 'aprovado' || demand.columnId === 'agendamento') ? (
           <div className="bg-emerald-50 dark:bg-emerald-950/50 border-b border-emerald-200 dark:border-emerald-800 px-5 sm:px-7 py-2.5 flex items-center gap-2 text-xs font-bold text-emerald-900 dark:text-emerald-300 shrink-0">
             <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-            <span>Esta demanda já foi APROVADA por você. Ela está na etapa de agendamento/publicação.</span>
+            <span>Esta demanda já foi APROVADA por você. A agência foi avisada.</span>
           </div>
         ) : demand.approvalStatus === 'alteracao_solicitada' ? (
           <div className="bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800 px-5 sm:px-7 py-2.5 flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-300 shrink-0">

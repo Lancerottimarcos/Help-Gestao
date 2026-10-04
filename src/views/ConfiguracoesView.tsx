@@ -34,7 +34,11 @@ import {
   Info,
   Upload,
   Image as ImageIcon,
-  RotateCcw
+  RotateCcw,
+  ImagePlus,
+  Sun,
+  Moon,
+  X
 } from 'lucide-react';
 import { SecuritySettingsTab } from '../components/SecuritySettingsTab';
 import { SecurityAuditView } from '../components/SecurityAuditView';
@@ -112,7 +116,7 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
   const [agencyCnpj, setAgencyCnpj] = useState(agencyInfo.cnpj || '45.892.102/0001-90');
   const [agencyAddress, setAgencyAddress] = useState(agencyInfo.address || 'São Paulo - SP, Brasil');
 
-  // Customização da Logotipo do Sistema
+  // Customização da Logotipo do Sistema e Identidade Visual (Baseado na referência)
   const [customLogoLight, setCustomLogoLight] = useState<string>(() => {
     try {
       return localStorage.getItem('agency_custom_logo_light') || localStorage.getItem('agency_custom_logo') || '';
@@ -129,6 +133,30 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
     }
   });
 
+  const [customLogoIconLight, setCustomLogoIconLight] = useState<string>(() => {
+    try {
+      return localStorage.getItem('agency_custom_logo_icon_light') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [customLogoIconDark, setCustomLogoIconDark] = useState<string>(() => {
+    try {
+      return localStorage.getItem('agency_custom_logo_icon_dark') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [accentColor, setAccentColor] = useState<string>(() => {
+    try {
+      return localStorage.getItem('agency_accent_color') || '#ff9501';
+    } catch {
+      return '#ff9501';
+    }
+  });
+
   const [logoInputUrl, setLogoInputUrl] = useState('');
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
 
@@ -141,8 +169,8 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
       return;
     }
 
-    if (file.size > 4 * 1024 * 1024) {
-      setLogoUploadError('A imagem deve ter no máximo 4MB.');
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoUploadError('A imagem deve ter no máximo 5MB.');
       return;
     }
 
@@ -171,6 +199,89 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const handleIconFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isDarkMode = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setLogoUploadError('Por favor selecione um arquivo de imagem válido (PNG, SVG, JPG, WebP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoUploadError('A imagem deve ter no máximo 5MB.');
+      return;
+    }
+
+    setLogoUploadError(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        if (isDarkMode) {
+          setCustomLogoIconDark(base64);
+          try {
+            localStorage.setItem('agency_custom_logo_icon_dark', base64);
+          } catch {}
+        } else {
+          setCustomLogoIconLight(base64);
+          try {
+            localStorage.setItem('agency_custom_logo_icon_light', base64);
+          } catch {}
+        }
+        window.dispatchEvent(new Event('agency_logo_changed'));
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3000);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = (isDarkMode = false) => {
+    if (isDarkMode) {
+      setCustomLogoDark('');
+      try {
+        localStorage.removeItem('agency_custom_logo_dark');
+      } catch {}
+    } else {
+      setCustomLogoLight('');
+      try {
+        localStorage.removeItem('agency_custom_logo_light');
+        localStorage.removeItem('agency_custom_logo');
+      } catch {}
+    }
+    window.dispatchEvent(new Event('agency_logo_changed'));
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const handleRemoveIcon = (isDarkMode = false) => {
+    if (isDarkMode) {
+      setCustomLogoIconDark('');
+      try {
+        localStorage.removeItem('agency_custom_logo_icon_dark');
+      } catch {}
+    } else {
+      setCustomLogoIconLight('');
+      try {
+        localStorage.removeItem('agency_custom_logo_icon_light');
+      } catch {}
+    }
+    window.dispatchEvent(new Event('agency_logo_changed'));
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const handleAccentColorChange = (newColor: string) => {
+    setAccentColor(newColor);
+    try {
+      localStorage.setItem('agency_accent_color', newColor);
+      document.documentElement.style.setProperty('--brand-accent', newColor);
+    } catch {}
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
   const handleApplyLogoUrl = (isDarkMode = false) => {
     if (!logoInputUrl.trim()) return;
     const url = logoInputUrl.trim();
@@ -196,12 +307,16 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
   const handleResetLogo = () => {
     setCustomLogoLight('');
     setCustomLogoDark('');
+    setCustomLogoIconLight('');
+    setCustomLogoIconDark('');
     setLogoInputUrl('');
     setLogoUploadError(null);
     try {
       localStorage.removeItem('agency_custom_logo');
       localStorage.removeItem('agency_custom_logo_light');
       localStorage.removeItem('agency_custom_logo_dark');
+      localStorage.removeItem('agency_custom_logo_icon_light');
+      localStorage.removeItem('agency_custom_logo_icon_dark');
     } catch {}
     window.dispatchEvent(new Event('agency_logo_changed'));
     setSavedSuccess(true);
@@ -291,9 +406,27 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
           if (customLogoLight) {
             localStorage.setItem('agency_custom_logo_light', customLogoLight);
             localStorage.setItem('agency_custom_logo', customLogoLight);
+          } else {
+            localStorage.removeItem('agency_custom_logo_light');
+            localStorage.removeItem('agency_custom_logo');
           }
           if (customLogoDark) {
             localStorage.setItem('agency_custom_logo_dark', customLogoDark);
+          } else {
+            localStorage.removeItem('agency_custom_logo_dark');
+          }
+          if (customLogoIconLight) {
+            localStorage.setItem('agency_custom_logo_icon_light', customLogoIconLight);
+          } else {
+            localStorage.removeItem('agency_custom_logo_icon_light');
+          }
+          if (customLogoIconDark) {
+            localStorage.setItem('agency_custom_logo_icon_dark', customLogoIconDark);
+          } else {
+            localStorage.removeItem('agency_custom_logo_icon_dark');
+          }
+          if (accentColor) {
+            localStorage.setItem('agency_accent_color', accentColor);
           }
           window.dispatchEvent(new Event('agency_logo_changed'));
         } catch {}
@@ -660,395 +793,468 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
           </div>
         </div>
       ) : (
-        /* Geral: Perfil & Identidade da Agência */
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left Column (7 cols): Agency Official Profile & Contact */}
-            <div className="lg:col-span-7 bg-white dark:bg-[#0f172a] rounded-[26px] border border-slate-200/90 dark:border-slate-800 p-6 sm:p-7 shadow-xs space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-[#142142] text-[#fab518] flex items-center justify-center font-black text-lg shadow-sm border border-slate-700">
-                    HI
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-[#142142] dark:text-white">
-                      Perfil Institucional da Agência
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Informações usadas em orçamentos, faturas, portal do cliente e cabeçalhos
-                    </p>
-                  </div>
-                </div>
-                <span className="text-[10px] px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                  ID: help-ideias-01
-                </span>
+        /* Geral: Perfil & Identidade da Agência — Baseado na referência visual */
+        <div className="space-y-8">
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-normal text-slate-800 dark:text-white tracking-tight">
+              Marca da agência
+            </h1>
+          </div>
+
+          {/* CARD PRINCIPAL: Identidade visual (Baseado com fidelidade na imagem de referência) */}
+          <div className="bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/90 dark:border-slate-800 p-6 sm:p-9 shadow-xs space-y-7">
+            {/* Card Header com Badge de Paleta */}
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-[#fef3e7] dark:bg-amber-950/40 text-[#f97316] dark:text-[#fab518] flex items-center justify-center shrink-0">
+                <Palette size={20} className="stroke-[2.2]" />
               </div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                Identidade visual
+              </h2>
+            </div>
 
-              {/* Seção: Logotipo Oficial do Sistema */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <label className="text-xs font-black text-[#142142] dark:text-white flex items-center gap-2">
-                      <ImageIcon size={15} className="text-[#fab518]" />
-                      <span>Logotipo Oficial do Sistema</span>
-                    </label>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Altere o logotipo que aparece na barra lateral, propostas comerciais e no portal do cliente
-                    </p>
-                  </div>
+            {/* Linha pontilhada divisória sutil */}
+            <div className="border-b border-dotted border-slate-200 dark:border-slate-800 -mt-2" />
 
-                  {(customLogoLight || customLogoDark) && (
-                    <button
-                      type="button"
-                      onClick={handleResetLogo}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-[11px] font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer self-start sm:self-auto"
-                      title="Voltar ao logotipo original"
-                    >
-                      <RotateCcw size={12} />
-                      <span>Restaurar Padrão</span>
-                    </button>
-                  )}
-                </div>
+            {/* SEÇÃO 1: Logo da agência (horizontal) */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Logo da agência (horizontal)
+              </h3>
 
-                {/* Previews: Fundo Claro & Fundo Escuro */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* Preview Tema Claro */}
-                  <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 flex flex-col items-center justify-center min-h-[90px] text-center shadow-2xs">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Prévia (Modo Claro / Orçamentos)
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                {/* Coluna Modo Claro */}
+                <div className="flex flex-col">
+                  <div className="mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f1f5f9] dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold">
+                      <Sun size={13} className="text-slate-600 dark:text-slate-400" />
+                      <span>Modo claro</span>
                     </span>
-                    <img
-                      src={customLogoLight || '/logotipo-help-2026.png'}
-                      alt="Logotipo Claro"
-                      className="max-h-10 max-w-[180px] object-contain"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = '/logotipo-help-2026.png';
-                      }}
-                    />
                   </div>
 
-                  {/* Preview Tema Escuro */}
-                  <div className="p-3.5 rounded-xl bg-[#0f172a] border border-slate-700/80 flex flex-col items-center justify-center min-h-[90px] text-center shadow-2xs">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Prévia (Modo Escuro / Sidebar)
-                    </span>
-                    <img
-                      src={customLogoDark || customLogoLight || '/logotipo-help-dark.png'}
-                      alt="Logotipo Escuro"
-                      className="max-h-10 max-w-[180px] object-contain"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = '/logotipo-help-dark.png';
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Botões de Upload */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-                  <label className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-[#fab518] dark:hover:border-[#fab518] text-xs font-bold text-slate-700 dark:text-slate-200 transition-all cursor-pointer">
-                    <Upload size={14} className="text-[#fab518]" />
-                    <span>Upload de Logotipo (PNG, SVG, JPG)</span>
+                  <label className="relative rounded-3xl border-2 border-dashed border-slate-200/90 dark:border-slate-700/80 bg-[#f8fafc]/80 dark:bg-slate-900/40 hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-600 transition-all p-6 min-h-[140px] flex flex-col items-center justify-center cursor-pointer text-center group overflow-hidden">
+                    {customLogoLight ? (
+                      <div className="relative w-full h-full flex flex-col items-center justify-center py-2">
+                        <img
+                          src={customLogoLight}
+                          alt="Logo horizontal modo claro"
+                          className="max-h-16 max-w-[240px] object-contain transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center gap-2">
+                          <span className="px-3 py-1 rounded-lg bg-white text-[#142142] text-xs font-bold shadow-xs">
+                            Trocar logo
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRemoveLogo(false);
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-xs cursor-pointer"
+                            title="Remover logotipo"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+                          <ImagePlus size={26} className="stroke-[1.6]" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-2">
+                          Enviar logo horizontal
+                        </span>
+                      </>
+                    )}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/svg+xml,image/jpeg,image/webp"
                       onChange={(e) => handleLogoFileUpload(e, false)}
                       className="hidden"
                     />
                   </label>
+                </div>
 
-                  <label className="sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/80 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 text-[11px] font-bold text-slate-700 dark:text-slate-200 transition-all cursor-pointer" title="Fazer upload de versão específica para fundo escuro">
-                    <Upload size={13} className="text-amber-400" />
-                    <span>Logo Escuro (Opcional)</span>
+                {/* Coluna Modo Escuro */}
+                <div className="flex flex-col">
+                  <div className="mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f1f5f9] dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold">
+                      <Moon size={13} className="text-slate-600 dark:text-slate-400" />
+                      <span>Modo escuro</span>
+                    </span>
+                  </div>
+
+                  <label className="relative rounded-3xl border-2 border-dashed border-slate-200/90 dark:border-slate-700/80 bg-[#f8fafc]/80 dark:bg-slate-900/40 hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-600 transition-all p-6 min-h-[140px] flex flex-col items-center justify-center cursor-pointer text-center group overflow-hidden">
+                    {customLogoDark ? (
+                      <div className="relative w-full h-full flex flex-col items-center justify-center py-2 bg-slate-900 rounded-2xl p-4">
+                        <img
+                          src={customLogoDark}
+                          alt="Logo horizontal modo escuro"
+                          className="max-h-16 max-w-[240px] object-contain transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center gap-2">
+                          <span className="px-3 py-1 rounded-lg bg-white text-[#142142] text-xs font-bold shadow-xs">
+                            Trocar logo
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRemoveLogo(true);
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-xs cursor-pointer"
+                            title="Remover logotipo"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+                          <ImagePlus size={26} className="stroke-[1.6]" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-2">
+                          Enviar logo horizontal
+                        </span>
+                      </>
+                    )}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/svg+xml,image/jpeg,image/webp"
                       onChange={(e) => handleLogoFileUpload(e, true)}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                    Opcional. Sem ela, usamos a do modo claro.
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-400 dark:text-slate-500 pt-1 leading-relaxed">
+                Menu, propostas e contratos. 600 × 160 px, PNG ou SVG com fundo transparente. Documentos usam sempre a do modo claro
+              </p>
+            </div>
+
+            {/* SEÇÃO 2: Ícone do menu reduzido */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Ícone do menu reduzido
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                {/* Coluna Modo Claro */}
+                <div className="flex flex-col">
+                  <div className="mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f1f5f9] dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold">
+                      <Sun size={13} className="text-slate-600 dark:text-slate-400" />
+                      <span>Modo claro</span>
+                    </span>
+                  </div>
+
+                  <label className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full border-2 border-dashed border-slate-200/90 dark:border-slate-700/80 bg-[#f8fafc]/80 dark:bg-slate-900/40 hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-600 transition-all flex flex-col items-center justify-center cursor-pointer text-center group overflow-hidden">
+                    {customLogoIconLight ? (
+                      <div className="relative w-full h-full flex items-center justify-center p-2">
+                        <img
+                          src={customLogoIconLight}
+                          alt="Ícone modo claro"
+                          className="w-full h-full object-contain rounded-full transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-full flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRemoveIcon(false);
+                            }}
+                            className="p-1.5 rounded-full bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-xs cursor-pointer"
+                            title="Remover ícone"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <ImagePlus size={22} className="stroke-[1.6] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1">
+                          Logo
+                        </span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                      onChange={(e) => handleIconFileUpload(e, false)}
                       className="hidden"
                     />
                   </label>
                 </div>
 
-                {/* Ou inserir via link/URL */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Ou informe a URL da imagem:
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="url"
-                      value={logoInputUrl}
-                      onChange={(e) => setLogoInputUrl(e.target.value)}
-                      placeholder="https://sua-empresa.com.br/logo.png"
-                      className="flex-1 bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleApplyLogoUrl(false)}
-                      disabled={!logoInputUrl.trim()}
-                      className="px-4 py-2.5 bg-[#142142] hover:bg-[#1e3264] dark:bg-[#fab518] dark:hover:bg-[#e29f11] text-white dark:text-[#142142] rounded-xl text-xs font-bold transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed shrink-0"
-                    >
-                      Aplicar
-                    </button>
+                {/* Coluna Modo Escuro */}
+                <div className="flex flex-col">
+                  <div className="mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f1f5f9] dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold">
+                      <Moon size={13} className="text-slate-600 dark:text-slate-400" />
+                      <span>Modo escuro</span>
+                    </span>
                   </div>
-                </div>
 
-                {logoUploadError && (
-                  <p className="text-xs text-rose-500 font-semibold animate-in fade-in">
-                    {logoUploadError}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Nome da Agência */}
-                <div className="sm:col-span-2 space-y-1.5">
-                  <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
-                    <Building2 size={13} className="text-[#fab518]" />
-                    <span>Nome Comercial / Marca</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={agencyName}
-                    onChange={(e) => setAgencyName(e.target.value)}
-                    placeholder="Ex: Help Ideias Digitais"
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-bold text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                  />
-                </div>
-
-                {/* E-mail de Envio */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
-                    <Mail size={13} className="text-[#fab518]" />
-                    <span>E-mail Institucional</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={agencyEmail}
-                    onChange={(e) => setAgencyEmail(e.target.value)}
-                    placeholder="contato@helpideiasdigitais.com.br"
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                  />
-                </div>
-
-                {/* Telefone / WhatsApp */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
-                    <Phone size={13} className="text-[#fab518]" />
-                    <span>WhatsApp / Telefone</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={agencyPhone}
-                    onChange={(e) => setAgencyPhone(e.target.value)}
-                    placeholder="(11) 98765-4321"
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                  />
-                </div>
-
-                {/* Website Oficial */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
-                    <Globe size={13} className="text-[#fab518]" />
-                    <span>Domínio / URL Personalizada</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={agencyWebsite}
-                    onChange={(e) => setAgencyWebsite(e.target.value)}
-                    placeholder="https://app.helpideiasdigitais.com.br"
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                  />
-                </div>
-
-                {/* Chave PIX Padrão */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
-                    <Landmark size={13} className="text-[#fab518]" />
-                    <span>Chave PIX para Cobranças</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={agencyPixKey}
-                    onChange={(e) => setAgencyPixKey(e.target.value)}
-                    placeholder="financeiro@helpideiasdigitais.com.br"
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                  />
-                </div>
-
-                {/* CNPJ */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
-                    <FileText size={13} className="text-[#fab518]" />
-                    <span>CNPJ / Registro Cadastral</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={agencyCnpj}
-                    onChange={(e) => setAgencyCnpj(e.target.value)}
-                    placeholder="45.892.102/0001-90"
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                  />
-                </div>
-
-                {/* Localização / Cidade */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
-                    <MapPin size={13} className="text-[#fab518]" />
-                    <span>Sede / Cidade</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={agencyAddress}
-                    onChange={(e) => setAgencyAddress(e.target.value)}
-                    placeholder="São Paulo - SP, Brasil"
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  <Lock size={12} className="text-[#fab518]" />
-                  <span>As alterações são verificadas pelo protocolo 2FA antes de serem salvas.</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#142142] hover:bg-[#1c2c54] dark:bg-[#fab518] dark:hover:bg-[#e29f11] text-white dark:text-[#142142] text-xs font-black transition-all shadow-xs cursor-pointer active:scale-95"
-                >
-                  <Save size={15} />
-                  <span>Salvar Dados da Agência</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Right Column (5 cols): Design System & Visual Guidelines */}
-            <div className="lg:col-span-5 space-y-6">
-              {/* Brand Colors Card */}
-              <div className="bg-white dark:bg-[#0f172a] rounded-[26px] border border-slate-200/90 dark:border-slate-800 p-6 sm:p-7 shadow-xs space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-[#fab518] flex items-center justify-center font-bold">
-                      <Palette size={18} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-black text-[#142142] dark:text-white">
-                        Design System & Cores
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Paleta oficial da Help Ideias Digitais
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] uppercase font-mono font-bold text-slate-400">
-                    5 Tons
-                  </span>
-                </div>
-
-                <div className="space-y-2.5">
-                  {officialColors.map((color) => (
-                    <div
-                      key={color.hex}
-                      className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 hover:border-[#fab518]/50 transition-all group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div 
-                          className="w-10 h-10 rounded-xl shadow-xs border border-black/10 shrink-0"
-                          style={{ backgroundColor: color.hex }}
+                  <label className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full border-2 border-dashed border-slate-200/90 dark:border-slate-700/80 bg-[#f8fafc]/80 dark:bg-slate-900/40 hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-600 transition-all flex flex-col items-center justify-center cursor-pointer text-center group overflow-hidden">
+                    {customLogoIconDark ? (
+                      <div className="relative w-full h-full flex items-center justify-center p-2 bg-slate-900 rounded-full">
+                        <img
+                          src={customLogoIconDark}
+                          alt="Ícone modo escuro"
+                          className="w-full h-full object-contain rounded-full transition-transform group-hover:scale-105"
                         />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-[#142142] dark:text-white truncate">
-                              {color.name}
-                            </span>
-                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                              {color.hex}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
-                            {color.role}
-                          </p>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-full flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRemoveIcon(true);
+                            }}
+                            className="p-1.5 rounded-full bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-xs cursor-pointer"
+                            title="Remover ícone"
+                          >
+                            <X size={12} />
+                          </button>
                         </div>
                       </div>
+                    ) : (
+                      <>
+                        <ImagePlus size={22} className="stroke-[1.6] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1">
+                          Logo
+                        </span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                      onChange={(e) => handleIconFileUpload(e, true)}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                    Opcional. Sem ela, usamos a do modo claro.
+                  </p>
+                </div>
+              </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleCopyColor(color.hex)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-[#142142] dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer shrink-0"
-                        title="Copiar código HEX"
-                      >
-                        {copiedColor === color.hex ? (
-                          <Check size={15} className="text-emerald-500" />
-                        ) : (
-                          <Copy size={15} />
-                        )}
-                      </button>
-                    </div>
+              <p className="text-xs text-slate-400 dark:text-slate-500 pt-1 leading-relaxed">
+                Quadrado, 256 × 256 px. PNG transparente: você escolhe a cor de fundo
+              </p>
+            </div>
+
+            {/* SEÇÃO 3: Cor de destaque */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Cor de destaque
+              </h3>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Círculo com a cor de destaque idêntico ao anexo */}
+                <div className="relative">
+                  <label
+                    htmlFor="accent-color-native-picker"
+                    className="w-10 h-10 rounded-full block cursor-pointer shadow-xs border-2 border-white dark:border-slate-800 ring-2 ring-slate-200/90 dark:ring-slate-700 transition-transform hover:scale-105 active:scale-95"
+                    style={{ backgroundColor: accentColor }}
+                    title="Alterar cor de destaque"
+                  />
+                  <input
+                    id="accent-color-native-picker"
+                    type="color"
+                    value={accentColor.startsWith('#') ? accentColor : '#ff9501'}
+                    onChange={(e) => handleAccentColorChange(e.target.value)}
+                    className="sr-only"
+                  />
+                </div>
+
+                {/* Campo de Código Hexadecimal */}
+                <div className="relative min-w-[150px] max-w-[200px]">
+                  <input
+                    type="text"
+                    value={accentColor}
+                    onChange={(e) => handleAccentColorChange(e.target.value)}
+                    placeholder="#ff9501"
+                    className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-mono font-bold text-slate-800 dark:text-slate-100 px-3.5 py-2.5 rounded-2xl border border-slate-200/90 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all uppercase"
+                  />
+                </div>
+
+                {/* Preset rápidos */}
+                <div className="flex items-center gap-2 pl-2">
+                  {[
+                    { hex: '#ff9501', label: 'Laranja Vibrante' },
+                    { hex: '#fab518', label: 'Amarelo Help' },
+                    { hex: '#142142', label: 'Azul Navy' },
+                    { hex: '#2563eb', label: 'Azul Real' },
+                    { hex: '#10b981', label: 'Verde Esmeralda' },
+                    { hex: '#8b5cf6', label: 'Roxo Criativo' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.hex}
+                      type="button"
+                      onClick={() => handleAccentColorChange(preset.hex)}
+                      className={`w-6 h-6 rounded-full cursor-pointer transition-all hover:scale-120 ${accentColor.toLowerCase() === preset.hex.toLowerCase() ? 'ring-2 ring-offset-2 ring-[#142142] dark:ring-white scale-110 shadow-xs' : 'opacity-80 hover:opacity-100'}`}
+                      style={{ backgroundColor: preset.hex }}
+                      title={preset.label}
+                    />
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Typography Preview Card */}
-              <div className="bg-white dark:bg-[#0f172a] rounded-[26px] border border-slate-200/90 dark:border-slate-800 p-6 sm:p-7 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                      <Type size={18} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-[#142142] dark:text-white">
-                        Tipografia Corporativa Global
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Família Lufga Oficial (Light, Regular, Semibold, Bold)
-                      </p>
-                    </div>
-                  </div>
+          {/* CARD SECUNDÁRIO: Dados Institucionais & Contato da Agência */}
+          <div className="bg-white dark:bg-[#0f172a] rounded-[28px] border border-slate-200/90 dark:border-slate-800 p-6 sm:p-9 shadow-xs space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#142142] text-[#fab518] flex items-center justify-center font-black text-sm shadow-xs border border-slate-700">
+                  HI
                 </div>
-
-                <div className="space-y-2.5">
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Lufga Light (300)</span>
-                      <p className="text-sm font-lufga-light text-[#142142] dark:text-slate-200">
-                        Help Ideias Digitais — Subtítulos e anotações refinadas
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600">300</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Lufga Regular (400)</span>
-                      <p className="text-sm font-lufga-regular text-[#142142] dark:text-slate-200">
-                        Texto corrido, inputs, descrições e interfaces de dados
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600">400</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Lufga Semibold (600)</span>
-                      <p className="text-sm font-lufga-semibold text-[#142142] dark:text-white">
-                        Hierarquia intermediária, botões, abas e ênfase visual
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600">600</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Lufga Bold (700)</span>
-                      <p className="text-sm font-lufga-bold text-[#142142] dark:text-white">
-                        Títulos executivos, métricas estratégicas e KPIs
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600">700</span>
-                  </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Dados Institucionais da Agência
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Informações usadas em orçamentos, faturas, portal do cliente e cabeçalhos
+                  </p>
                 </div>
               </div>
+              <span className="text-[10px] px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
+                ID: help-ideias-01
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Nome da Agência */}
+              <div className="sm:col-span-2 lg:col-span-1 space-y-1.5">
+                <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
+                  <Building2 size={13} className="text-[#fab518]" />
+                  <span>Nome Comercial / Marca</span>
+                </label>
+                <input
+                  type="text"
+                  value={agencyName}
+                  onChange={(e) => setAgencyName(e.target.value)}
+                  placeholder="Ex: Help Ideias Digitais"
+                  className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-bold text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* CNPJ */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
+                  <FileText size={13} className="text-[#fab518]" />
+                  <span>CNPJ / Registro</span>
+                </label>
+                <input
+                  type="text"
+                  value={agencyCnpj}
+                  onChange={(e) => setAgencyCnpj(e.target.value)}
+                  placeholder="45.892.102/0001-90"
+                  className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* E-mail de Envio */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
+                  <Mail size={13} className="text-[#fab518]" />
+                  <span>E-mail Institucional</span>
+                </label>
+                <input
+                  type="email"
+                  value={agencyEmail}
+                  onChange={(e) => setAgencyEmail(e.target.value)}
+                  placeholder="contato@helpideiasdigitais.com.br"
+                  className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* Telefone / WhatsApp */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
+                  <Phone size={13} className="text-[#fab518]" />
+                  <span>WhatsApp / Telefone</span>
+                </label>
+                <input
+                  type="text"
+                  value={agencyPhone}
+                  onChange={(e) => setAgencyPhone(e.target.value)}
+                  placeholder="(11) 98765-4321"
+                  className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* Website Oficial */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
+                  <Globe size={13} className="text-[#fab518]" />
+                  <span>Domínio / URL</span>
+                </label>
+                <input
+                  type="text"
+                  value={agencyWebsite}
+                  onChange={(e) => setAgencyWebsite(e.target.value)}
+                  placeholder="https://app.helpideiasdigitais.com.br"
+                  className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* Chave PIX Padrão */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
+                  <Landmark size={13} className="text-[#fab518]" />
+                  <span>Chave PIX de Cobrança</span>
+                </label>
+                <input
+                  type="text"
+                  value={agencyPixKey}
+                  onChange={(e) => setAgencyPixKey(e.target.value)}
+                  placeholder="financeiro@helpideiasdigitais.com.br"
+                  className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* Sede / Cidade */}
+              <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
+                <label className="text-xs font-bold text-[#142142] dark:text-slate-200 flex items-center gap-1.5">
+                  <MapPin size={13} className="text-[#fab518]" />
+                  <span>Sede / Endereço</span>
+                </label>
+                <input
+                  type="text"
+                  value={agencyAddress}
+                  onChange={(e) => setAgencyAddress(e.target.value)}
+                  placeholder="São Paulo - SP, Brasil"
+                  className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                <Lock size={12} className="text-[#fab518]" />
+                <span>As alterações de perfil e identidade visual são salvas imediatamente.</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSave}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#142142] hover:bg-[#1c2c54] dark:bg-[#fab518] dark:hover:bg-[#e29f11] text-white dark:text-[#142142] text-xs font-black transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <Save size={15} />
+                <span>Salvar Identidade & Dados</span>
+              </button>
             </div>
           </div>
         </div>

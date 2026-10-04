@@ -77,7 +77,7 @@ export const NewDemandModal: React.FC<NewDemandModalProps> = ({
   const [priority, setPriority] = useState<Priority>('media');
   const [columnId, setColumnId] = useState<KanbanColumnId>(columns?.[0]?.id || 'ideias');
   const [dueDate, setDueDate] = useState(() => initialData?.dueDate || getTodayDateString());
-  const [assigneeName, setAssigneeName] = useState(activeMembersList[0]?.name || 'Beatriz Lima');
+  const [assigneeName, setAssigneeName] = useState(activeMembersList[0]?.name || 'Marcos Lancerotti');
   const [attachments, setAttachments] = useState<DemandAttachment[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {

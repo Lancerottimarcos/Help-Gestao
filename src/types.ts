@@ -396,6 +396,7 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   createdAt: string;
+  timeFormatted?: string;
   reactions?: Record<string, string[]>;
   isPinned?: boolean;
   replyTo?: {
@@ -420,6 +421,12 @@ export interface ChatChannel {
   memberIds?: string[];
   unreadCount?: number;
   totalMessages?: number;
+  lastMessage?: {
+    content: string;
+    senderName?: string;
+    createdAt?: string;
+    timestamp?: string | number;
+  };
 }
 
 export type AppointmentCategory = 

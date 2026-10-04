@@ -87,7 +87,7 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
   const [columnId, setColumnId] = useState<KanbanColumnId>(demand?.columnId || 'ideias');
   const [priority, setPriority] = useState<Priority>(demand?.priority || 'media');
   const [dueDate, setDueDate] = useState(demand?.dueDate || '');
-  const [assigneeName, setAssigneeName] = useState(demand?.assignee?.name || activeTeamMembers[0]?.name || 'Beatriz Lima');
+  const [assigneeName, setAssigneeName] = useState(demand?.assignee?.name || activeTeamMembers[0]?.name || 'Marcos Lancerotti');
   const [assigneeAvatar, setAssigneeAvatar] = useState(demand?.assignee?.avatar || '');
 
   // Resolve dynamically avatar for the selected assignee
@@ -151,7 +151,7 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
       setColumnId(demand.columnId || 'ideias');
       setPriority(demand.priority || 'media');
       setDueDate(demand.dueDate || '');
-      setAssigneeName(demand.assignee?.name || activeTeamMembers[0]?.name || 'Beatriz Lima');
+      setAssigneeName(demand.assignee?.name || activeTeamMembers[0]?.name || 'Marcos Lancerotti');
       setAssigneeAvatar(demand.assignee?.avatar || '');
 
       setAttachments(

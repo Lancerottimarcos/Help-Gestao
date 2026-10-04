@@ -250,7 +250,7 @@ export function notifyDemandApproved(demand: {
   if (!prefs.notifyOnApproval) return;
 
   const title = `✅ Demanda Aprovada: ${demand.client}`;
-  const body = `O cliente ${demand.client} aprovou a demanda "${demand.title}". O card foi movido automaticamente para Agendamento.`;
+  const body = `O cliente ${demand.client} aprovou a demanda "${demand.title}". A agência foi avisada.`;
 
   sendNotification(title, {
     body,

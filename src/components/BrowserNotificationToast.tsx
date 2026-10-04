@@ -137,7 +137,7 @@ export const BrowserNotificationToast: React.FC<BrowserNotificationToastProps> =
                   {toast.title}
                 </h4>
 
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 line-clamp-2 leading-relaxed">
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed break-words">
                   {toast.body}
                 </p>
 

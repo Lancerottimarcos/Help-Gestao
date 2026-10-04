@@ -78,6 +78,38 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
     );
   }
 
+  // Regra: Mostrar a demanda no portal do cliente, somente quando a demanda estiver na coluna Aprovação Cliente
+  const isApprovalCol = 
+    demand.columnId === 'aprovacao' || 
+    demand.columnId === 'aprovacao-cliente' || 
+    demand.columnId === 'aprovacao_cliente' || 
+    (demand.columnId && demand.columnId.toLowerCase().includes('aprov'));
+  const isApproved = demand.approvalStatus === 'aprovado' || demand.columnId === 'agendamento' || demand.columnId === 'concluidas';
+
+  if (!isApprovalCol && !isApproved) {
+    return (
+      <div className="min-h-screen bg-[#0a1224] text-white flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+        <div className="w-full max-w-md bg-[#142142] border border-[#1d2e56] rounded-3xl p-8 space-y-5 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+            <Clock size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-white">Demanda em Produção</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Esta demanda ainda está em fase interna de planejamento e produção na agência. Ela estará disponível no portal do cliente assim que for movida para a coluna <strong className="text-amber-400">Aprovação Cliente</strong>.
+          </p>
+          <button
+            type="button"
+            onClick={onGoToAdminLogin}
+            className="w-full py-3 rounded-xl bg-[#fab518] hover:bg-[#fab518]/90 text-[#142142] font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+          >
+            <Lock size={15} />
+            <span>Acessar Painel da Agência</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const clientCompany = client?.companyName || demand.client;
   const contactName = client?.contactName || client?.name || 'Cliente';
 
@@ -101,7 +133,7 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
 
   const handleApproveClick = () => {
     onApprove(demand.id);
-    setActionSuccessMessage('Material Aprovado com sucesso! A equipe da Help Ideias Digitais já foi notificada para prosseguir com o agendamento e veiculação.');
+    setActionSuccessMessage('Material Aprovado com sucesso! A agência foi avisada.');
     setIsChangeFormOpen(false);
     setIsRejectConfirmOpen(false);
   };
@@ -187,10 +219,10 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            {demand.approvalStatus === 'aprovado' && (
+            {(demand.approvalStatus === 'aprovado' || demand.columnId === 'agendamento') && (
               <span className="px-3.5 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black flex items-center gap-1.5">
                 <CheckCircle2 size={15} />
-                <span>Aprovado</span>
+                <span>Aprovado (Agendamento)</span>
               </span>
             )}
             {demand.approvalStatus === 'alteracao_solicitada' && (

@@ -7,6 +7,6 @@ coverage/
 .env*
 !.env.example
 supabase-config.json
-data/
+/data/
 *.sqlite
 *.db

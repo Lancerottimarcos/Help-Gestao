@@ -173,7 +173,18 @@ export const DemandasView: React.FC<DemandasViewProps> = ({
     return kanbanColumnsData;
   });
 
-  const activeColumns = (columns && columns.length > 0) ? columns : localColumns;
+  const rawActiveColumns = (columns && columns.length > 0) ? columns : localColumns;
+  const activeColumns = useMemo(() => {
+    if (isClientUser) {
+      const clientCols = rawActiveColumns.filter((c) => {
+        const idLower = c.id.toLowerCase();
+        const titleLower = (c.title || '').toLowerCase();
+        return idLower === 'aprovacao' || idLower.includes('aprov') || titleLower.includes('aprov');
+      });
+      return clientCols.length > 0 ? clientCols : rawActiveColumns;
+    }
+    return rawActiveColumns;
+  }, [rawActiveColumns, isClientUser]);
 
   // Sincroniza estado local com as colunas fornecidas pelo componente pai (App.tsx)
   useEffect(() => {
@@ -647,7 +658,7 @@ export const DemandasView: React.FC<DemandasViewProps> = ({
     );
     const resolvedItemClient = itemMatchedClient ? (itemMatchedClient.name || itemMatchedClient.companyName) : (item.client || '');
 
-    // Para usuários clientes autenticados no portal, exibir estritamente suas demandas
+    // Para usuários clientes autenticados no portal, exibir estritamente suas demandas E somente na coluna Aprovação Cliente
     if (isClientUser) {
       const isClientMatch =
         (currentUser?.clientId && (item.clientId === currentUser.clientId || itemMatchedClient?.id === currentUser.clientId)) ||
@@ -657,6 +668,13 @@ export const DemandasView: React.FC<DemandasViewProps> = ({
         (itemMatchedClient?.companyName && itemMatchedClient.companyName.toLowerCase() === clientScopeName.toLowerCase());
 
       if (!isClientMatch) {
+        return false;
+      }
+
+      // Regra oficial: Mostrar a demanda no portal do cliente SOMENTE quando a demanda estiver na coluna Aprovação Cliente
+      const colLower = (item.columnId || '').toLowerCase();
+      const isApprovalCol = colLower === 'aprovacao' || colLower.includes('aprov');
+      if (!isApprovalCol) {
         return false;
       }
     }
