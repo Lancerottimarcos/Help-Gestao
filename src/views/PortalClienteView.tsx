@@ -4,13 +4,15 @@ import {
   Client, 
   UserProfile, 
   Invoice,
-  KanbanColumn
+  KanbanColumn,
+  Service
 } from '../types';
 import { 
   User, 
   Mail, 
   Phone, 
   Wallet, 
+  Briefcase,
   LayoutGrid, 
   FileText, 
   BarChart3, 
@@ -50,6 +52,7 @@ import {
 export interface PortalClienteViewProps {
   demands: DemandItem[];
   clients: Client[];
+  services?: Service[];
   invoices?: Invoice[];
   columns?: KanbanColumn[];
   currentUser?: UserProfile;
@@ -127,7 +130,7 @@ const defaultFallbackClient: Client = {
   avatar: '',
   coverColor: '#ff9800',
   status: 'Ativo',
-  monthlyFee: 0,
+  monthlyFee: 2500,
   services: ['Social Media', 'Conteúdo'],
   activeDemandsCount: 0,
   joinedDate: '15/01/2026',
@@ -141,6 +144,7 @@ const defaultFallbackClient: Client = {
 export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
   demands,
   clients,
+  services = [],
   invoices = [],
   columns = [],
   currentUser,
@@ -162,6 +166,8 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
   const [adjustFeedbackText, setAdjustFeedbackText] = useState('');
   const [copiedPix, setCopiedPix] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [isEditingContractValue, setIsEditingContractValue] = useState(false);
+  const [tempContractValue, setTempContractValue] = useState('');
 
   // Seletor de cliente para administradores
   const isClientRole = currentUser?.role === 'cliente';
@@ -235,6 +241,60 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     }
     return clientDemands.filter(d => d.columnId !== 'concluidas').length;
   }, [clientDemands, isClientRole, pendingApprovalDemands]);
+
+  // Valor do serviço contratado pelo cliente (mensalidade / pacote)
+  const contractedServiceValue = useMemo(() => {
+    // 1. Mensalidade explicitamente cadastrada no cliente
+    if (typeof activeClient.monthlyFee === 'number' && activeClient.monthlyFee > 0) {
+      return activeClient.monthlyFee;
+    }
+
+    // 2. Se o cliente possui serviços cadastrados e temos catálogo com preços
+    if (services && services.length > 0 && activeClient.services && activeClient.services.length > 0) {
+      const matched = services.filter((s) =>
+        activeClient.services?.some((cs) => {
+          const a = cs.toLowerCase().trim();
+          const b = s.title.toLowerCase().trim();
+          return a === b || a.includes(b) || b.includes(a);
+        })
+      );
+      const sum = matched.reduce((acc, curr) => acc + (curr.basePrice || 0), 0);
+      if (sum > 0) return sum;
+    }
+
+    // 3. Buscar na última fatura emitida do cliente
+    if (invoices && invoices.length > 0) {
+      const cInvoices = invoices.filter(
+        (inv) => inv.client?.toLowerCase().trim() === activeClient.name?.toLowerCase().trim()
+      );
+      if (cInvoices.length > 0) {
+        const latest = cInvoices[cInvoices.length - 1];
+        if (latest.value && latest.value > 0) return latest.value;
+      }
+    }
+
+    // 4. Valor estimado proporcional ao número de serviços contratados
+    if (activeClient.services && activeClient.services.length > 0) {
+      return activeClient.services.length * 1500;
+    }
+
+    return 2500;
+  }, [activeClient, services, invoices]);
+
+  const handleSaveContractValue = () => {
+    const cleanStr = tempContractValue.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+    const num = parseFloat(cleanStr);
+    if (!isNaN(num) && num >= 0 && onUpdateClient) {
+      const updatedClient: Client = {
+        ...activeClient,
+        monthlyFee: num,
+      };
+      onUpdateClient(updatedClient);
+      setActionNotice(`Valor do serviço contratado atualizado para R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+      setTimeout(() => setActionNotice(null), 3500);
+    }
+    setIsEditingContractValue(false);
+  };
 
   // Estado da aba Conteúdo (Busca, Filtro de Tipo e Modal de Preview da Peça)
   const [conteudoSearch, setConteudoSearch] = useState('');

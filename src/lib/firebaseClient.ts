@@ -1,5 +1,4 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let app: FirebaseApp;
@@ -9,28 +8,35 @@ if (!getApps().length) {
   app = getApp();
 }
 
-export const firestore: Firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export { app };
 
-export async function fetchFirestoreData(collectionName = 'agency_data', docId = 'main_state'): Promise<any | null> {
+export async function fetchFirestoreData(_collectionName = 'agency_data', _docId = 'main_state'): Promise<any | null> {
+  // Acesso seguro e resiliente ao estado central via /api/database (sem limites de cota)
   try {
-    const docRef = doc(firestore, collectionName, docId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data();
+    if (typeof window !== 'undefined' && window.fetch) {
+      const res = await fetch('/api/database');
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.data) {
+          return json.data;
+        }
+      }
     }
-  } catch (err) {
-    console.warn('[Firestore Client] Erro ao buscar documento:', err);
-  }
+  } catch {}
   return null;
 }
 
-export async function saveFirestoreData(data: Record<string, any>, collectionName = 'agency_data', docId = 'main_state'): Promise<boolean> {
+export async function saveFirestoreData(data: Record<string, any>, _collectionName = 'agency_data', _docId = 'main_state'): Promise<boolean> {
+  // Gravação segura via /api/database (persiste em disco e sincroniza na nuvem pelo servidor)
   try {
-    const docRef = doc(firestore, collectionName, docId);
-    await setDoc(docRef, { ...data, updatedAt: Date.now() }, { merge: true });
-    return true;
-  } catch (err) {
-    console.warn('[Firestore Client] Erro ao salvar documento:', err);
-    return false;
-  }
+    if (typeof window !== 'undefined' && window.fetch) {
+      const res = await fetch('/api/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, updatedAt: Date.now() }),
+      });
+      return res.ok;
+    }
+  } catch {}
+  return false;
 }

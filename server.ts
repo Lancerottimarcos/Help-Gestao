@@ -6,23 +6,78 @@ import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
 import { isValidCnpj } from "./src/utils/cnpjValidator";
 import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, terminate } from "firebase/firestore";
 
 const CONFIG_FILE = path.join(process.cwd(), "supabase-config.json");
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "database.json");
 const CHAT_FILE = path.join(DATA_DIR, "chat-messages.json");
 const FIREBASE_CONFIG_FILE = path.join(process.cwd(), "firebase-applet-config.json");
+const FIRESTORE_STATUS_FILE = path.join(DATA_DIR, "firestore-status.json");
 
 let firestoreDb: any = null;
-if (fs.existsSync(FIREBASE_CONFIG_FILE)) {
+
+function isFirestoreQuotaExhausted(): boolean {
   try {
-    const fbConfig = JSON.parse(fs.readFileSync(FIREBASE_CONFIG_FILE, "utf-8"));
-    const fbApp = !getFirebaseApps().length ? initFirebaseApp(fbConfig) : getFirebaseApp();
-    firestoreDb = getFirestore(fbApp, fbConfig.firestoreDatabaseId);
-    console.log("[Firestore Server] Conectado com sucesso:", fbConfig.firestoreDatabaseId);
-  } catch (err) {
-    console.warn("[Firestore Server] Aviso ao conectar com Firestore:", err);
+    if (fs.existsSync(FIRESTORE_STATUS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(FIRESTORE_STATUS_FILE, "utf-8"));
+      if (data && data.quotaExhausted) {
+        // Se a cota foi esgotada nas últimas 12 horas, mantém desabilitado para evitar loops de erro gRPC
+        const elapsed = Date.now() - (data.exhaustedAt || 0);
+        if (elapsed < 12 * 60 * 60 * 1000) {
+          return true;
+        }
+      }
+    }
+  } catch {}
+  return false;
+}
+
+async function markFirestoreQuotaExhausted() {
+  try {
+    fs.writeFileSync(
+      FIRESTORE_STATUS_FILE,
+      JSON.stringify(
+        {
+          quotaExhausted: true,
+          exhaustedAt: Date.now(),
+          reason: "Free daily write units per project limit reached (resource-exhausted)",
+        },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+  } catch {}
+
+  console.warn(
+    `[Firestore Server] Cota diária gratuita do Firestore atingida (${new Date().toISOString()}). Encerrando streams do Firestore e operando em modo local resiliente via data/database.json.`
+  );
+
+  // Termina a instância para fechar quaisquer streams gRPC pendentes e cancelar retentativas
+  if (firestoreDb) {
+    const dbToClose = firestoreDb;
+    firestoreDb = null;
+    try {
+      await terminate(dbToClose);
+    } catch {}
+  }
+}
+
+if (fs.existsSync(FIREBASE_CONFIG_FILE)) {
+  if (isFirestoreQuotaExhausted()) {
+    console.log(
+      "[Firestore Server] Cota gratuita diária do Firestore está temporariamente esgotada. Persistência ativa via disco local (data/database.json)."
+    );
+  } else {
+    try {
+      const fbConfig = JSON.parse(fs.readFileSync(FIREBASE_CONFIG_FILE, "utf-8"));
+      const fbApp = !getFirebaseApps().length ? initFirebaseApp(fbConfig) : getFirebaseApp();
+      firestoreDb = getFirestore(fbApp, fbConfig.firestoreDatabaseId);
+      console.log("[Firestore Server] Conectado com sucesso:", fbConfig.firestoreDatabaseId);
+    } catch (err) {
+      console.warn("[Firestore Server] Aviso ao conectar com Firestore:", err);
+    }
   }
 }
 
@@ -131,10 +186,27 @@ async function startServer() {
     }
   });
 
-  // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Firestore + Cache)
+  // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Cache em disco + Firestore)
   app.get("/api/database", async (_req, res) => {
-    // 1. Tenta carregar do Firestore primeiro (banco de dados em nuvem permanente)
-    if (firestoreDb) {
+    // 1. Prioriza sempre o arquivo local no disco se existir (altíssima velocidade, zero consumo de cota)
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        const raw = fs.readFileSync(DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return res.json({
+            success: true,
+            data: parsed,
+            timestamp: Date.now(),
+          });
+        }
+      } catch (e: any) {
+        console.error("Erro ao ler data/database.json:", e);
+      }
+    }
+
+    // 2. Se o arquivo não existir e o Firestore não estiver com cota esgotada, tenta carregar da nuvem
+    if (firestoreDb && !isFirestoreQuotaExhausted()) {
       try {
         const docRef = doc(firestoreDb, "agency_data", "main_state");
         const snap = await getDoc(docRef);
@@ -150,24 +222,15 @@ async function startServer() {
             timestamp: Date.now(),
           });
         }
-      } catch (err) {
-        console.warn("[Firestore Server] Aviso ao consultar Firestore:", err);
+      } catch (err: any) {
+        const msg = err?.message || "";
+        const code = err?.code || "";
+        if (code === "resource-exhausted" || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota limit exceeded") || msg.includes("Quota")) {
+          markFirestoreQuotaExhausted();
+        } else {
+          console.warn("[Firestore Server] Aviso ao consultar Firestore:", err);
+        }
       }
-    }
-
-    // 2. Fallback de alta disponibilidade: lê cache local do arquivo
-    try {
-      if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, "utf-8");
-        const parsed = JSON.parse(raw);
-        return res.json({
-          success: true,
-          data: parsed,
-          timestamp: Date.now(),
-        });
-      }
-    } catch (e: any) {
-      console.error("Erro ao ler data/database.json:", e);
     }
 
     res.json({
@@ -222,16 +285,22 @@ async function startServer() {
         updatedAt: Date.now(),
       };
 
-      // 1. Grava no cache de arquivo local
+      // 1. Grava no cache de arquivo local (primário, resiliente e sem limites de cota)
       fs.writeFileSync(DB_FILE, JSON.stringify(merged, null, 2), "utf-8");
 
-      // 2. Grava de forma permanente no Google Cloud Firestore
-      if (firestoreDb) {
+      // 2. Grava de forma secundária no Google Cloud Firestore se houver cota disponível
+      if (firestoreDb && !isFirestoreQuotaExhausted()) {
         try {
           const docRef = doc(firestoreDb, "agency_data", "main_state");
           await setDoc(docRef, merged, { merge: true });
-        } catch (fErr) {
-          console.warn("[Firestore Server] Aviso ao persistir no Firestore:", fErr);
+        } catch (fErr: any) {
+          const msg = fErr?.message || "";
+          const code = fErr?.code || "";
+          if (code === "resource-exhausted" || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota limit exceeded") || msg.includes("Quota")) {
+            markFirestoreQuotaExhausted();
+          } else {
+            console.warn("[Firestore Server] Aviso ao persistir no Firestore:", fErr);
+          }
         }
       }
 

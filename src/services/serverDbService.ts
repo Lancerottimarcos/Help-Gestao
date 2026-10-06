@@ -384,8 +384,8 @@ export const serverDbService = {
           };
           pendingPayload = {};
 
-          // 1. Grava no servidor central (/api/database)
-          const fetchPromise = fetch('/api/database', {
+          // 1. Grava no servidor central (/api/database), que persiste no disco local e sincroniza no Firestore server-side
+          const res = await fetch('/api/database', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -396,15 +396,7 @@ export const serverDbService = {
             return null;
           });
 
-          // 2. Grava simultaneamente e de forma redundante no Google Cloud Firestore
-          const firestorePromise = saveFirestoreData(bodyToSend, 'agency_data', 'main_state').catch((err) => {
-            console.warn('Erro ao persistir no Firestore:', err);
-            return false;
-          });
-
-          const [res, fsSuccess] = await Promise.all([fetchPromise, firestorePromise]);
-
-          if ((res && res.ok) || fsSuccess) {
+          if (res && res.ok) {
             resolve(true);
             return;
           }

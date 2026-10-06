@@ -34,9 +34,11 @@ import {
   Eye,
   EyeOff,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  Briefcase,
+  Tag
 } from 'lucide-react';
-import { Client, DemandItem } from '../types';
+import { Client, DemandItem, Service } from '../types';
 import { ClientDetailDrawer } from '../components/ClientDetailDrawer';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { ClientPasswordManagerModal } from '../components/ClientPasswordManagerModal';
@@ -65,6 +67,7 @@ export const CLIENT_COVER_COLORS = [
 interface ClientesViewProps {
   clients: Client[];
   demands?: DemandItem[];
+  services?: Service[];
   onAddClient: (client: Client) => void;
   onUpdateClient?: (client: Client) => void;
   onDeleteClient?: (clientId: string) => void;
@@ -79,6 +82,7 @@ interface ClientesViewProps {
 export const ClientesView: React.FC<ClientesViewProps> = ({
   clients,
   demands = [],
+  services = [],
   onAddClient,
   onUpdateClient,
   onDeleteClient,
@@ -96,6 +100,20 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [isPasswordManagerOpen, setIsPasswordManagerOpen] = useState(false);
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
 
+  // Default suggested agency services list
+  const defaultAgencyServices = useMemo(() => [
+    'Gestão de Redes Sociais',
+    'Tráfego Pago (Meta Ads & Google Ads)',
+    'Criação de Sites & Landing Pages',
+    'Design Gráfico & Identidade Visual',
+    'Consultoria Estratégica',
+    'SEO & Otimização de Busca',
+    'Produção e Edição de Vídeos',
+    'Copywriting & Redação Publicitária',
+    'Automação & Inbound Marketing',
+    'Suporte & Manutenção Web',
+  ], []);
+
   // New Client States (Full field matching user images)
   const [newPersonType, setNewPersonType] = useState<'fisica' | 'juridica'>('juridica');
   const [newClientName, setNewClientName] = useState('');
@@ -103,6 +121,8 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [newClientEmails, setNewClientEmails] = useState<string[]>(['']);
   const [newClientPhones, setNewClientPhones] = useState<string[]>(['']);
   const [newClientSegment, setNewClientSegment] = useState('');
+  const [newClientServices, setNewClientServices] = useState<string[]>(['Gestão de Redes Sociais', 'Tráfego Pago']);
+  const [newCustomServiceInput, setNewCustomServiceInput] = useState('');
   
   // Endereço
   const [newClientCep, setNewClientCep] = useState('');
@@ -156,6 +176,14 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [editPortalPass, setEditPortalPass] = useState('');
   const [editPortalEnabled, setEditPortalEnabled] = useState(true);
   const [showEditPass, setShowEditPass] = useState(false);
+  const [editServices, setEditServices] = useState<string[]>([]);
+  const [editCustomServiceInput, setEditCustomServiceInput] = useState('');
+
+  const allAvailableServices = useMemo(() => {
+    const registered = (services || []).map((s) => s.title).filter(Boolean);
+    const fromClients = clients.flatMap((c) => c.services || []).filter(Boolean);
+    return Array.from(new Set([...registered, ...defaultAgencyServices, ...fromClients]));
+  }, [services, clients, defaultAgencyServices]);
 
   // Helper for avatar file upload
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
@@ -220,6 +248,8 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
     setEditEmails(client.emails && client.emails.length > 0 ? [...client.emails] : [client.email || '']);
     setEditPhones(client.phones && client.phones.length > 0 ? [...client.phones] : [client.phone || '']);
     setEditSegment(client.segment);
+    setEditServices(Array.isArray(client.services) && client.services.length > 0 ? [...client.services] : []);
+    setEditCustomServiceInput('');
     setEditCep(client.cep || '');
     setEditStreet(client.street || '');
     setEditNumber(client.number || '');
@@ -271,6 +301,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
       contactName: editPersonType === 'fisica' ? editName.trim() : (editingClient.contactName || editName.trim()),
       cpfCnpj: editCpfCnpj.trim() || undefined,
       segment: editSegment.trim() || 'Geral',
+      services: editServices.length > 0 ? editServices : (editingClient.services && editingClient.services.length > 0 ? editingClient.services : []),
       phone: primaryPhone,
       phones: cleanedPhones,
       email: primaryEmail,
@@ -342,7 +373,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
       avatar: newClientAvatar.trim() || defaultFallbackAvatar,
       status: 'Ativo',
       monthlyFee: 0,
-      services: ['Gestão de Redes Sociais', 'Tráfego Pago'],
+      services: newClientServices.length > 0 ? newClientServices : ['Gestão de Redes Sociais'],
       activeDemandsCount: 0,
       joinedDate: new Date().toISOString().split('T')[0],
     };
@@ -357,6 +388,8 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
     setNewClientEmails(['']);
     setNewClientPhones(['']);
     setNewClientSegment('');
+    setNewClientServices(['Gestão de Redes Sociais', 'Tráfego Pago']);
+    setNewCustomServiceInput('');
     setNewClientCep('');
     setNewClientStreet('');
     setNewClientNumber('');
@@ -678,6 +711,27 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Serviços Contratados */}
+              {client.services && client.services.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mb-3.5">
+                  {client.services.slice(0, 2).map((srv, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 max-w-[140px] truncate"
+                      title={srv}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#fab518] shrink-0" />
+                      <span className="truncate">{srv}</span>
+                    </span>
+                  ))}
+                  {client.services.length > 2 && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                      +{client.services.length - 2}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Bottom Footer */}
@@ -1006,6 +1060,161 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                   onChange={(e) => setNewClientSegment(e.target.value)}
                   className="w-full bg-[#F2F2F2] dark:bg-slate-800 text-sm text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-transparent focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium transition-all"
                 />
+              </div>
+
+              {/* Seção: Serviço(s) Contratado(s) */}
+              <div id="new-client-services-section" className="p-4 sm:p-5 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-200/80 dark:border-amber-800/60 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Briefcase size={16} className="text-[#fab518]" />
+                    <label className="text-xs font-bold text-[#142142] dark:text-white uppercase tracking-wider">
+                      Serviço(s) Contratado(s)
+                    </label>
+                  </div>
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    {newClientServices.length} {newClientServices.length === 1 ? 'serviço contratado' : 'serviços contratados'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Selecione o serviço ou pacote de serviços contratados pelo cliente.
+                </p>
+
+                {/* Serviços Atualmente Selecionados */}
+                {newClientServices.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {newClientServices.map((srv, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#142142] text-white dark:bg-slate-800 dark:text-white border border-[#fab518]/50 text-xs font-semibold shadow-xs"
+                      >
+                        <Check size={12} className="text-[#fab518] stroke-[3]" />
+                        <span>{srv}</span>
+                        <button
+                          type="button"
+                          onClick={() => setNewClientServices(newClientServices.filter((_, i) => i !== idx))}
+                          className="ml-1 text-slate-300 hover:text-rose-400 cursor-pointer p-0.5 transition-colors"
+                          title={`Remover serviço ${srv}`}
+                          aria-label={`Remover ${srv}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-dashed border-amber-300 dark:border-amber-800/80 text-center">
+                    <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                      Nenhum serviço selecionado ainda. Escolha no seletor abaixo ou clique nos atalhos rápidos.
+                    </p>
+                  </div>
+                )}
+
+                {/* Seleção e Adição */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      Selecionar Serviço da Lista
+                    </label>
+                    <select
+                      id="select-new-contracted-service"
+                      value=""
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        if (val && !newClientServices.includes(val)) {
+                          setNewClientServices([...newClientServices, val]);
+                        }
+                      }}
+                      className="w-full bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all cursor-pointer font-medium"
+                    >
+                      <option value="">+ Selecionar um serviço...</option>
+                      {allAvailableServices.map((srv, idx) => (
+                        <option
+                          key={idx}
+                          value={srv}
+                          disabled={newClientServices.includes(srv)}
+                        >
+                          {newClientServices.includes(srv) ? `✓ ${srv} (Contratado)` : srv}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      Ou Digite um Novo Serviço
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Ex: Gestão de TikTok, Copywriting..."
+                        value={newCustomServiceInput}
+                        onChange={(e) => setNewCustomServiceInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const val = newCustomServiceInput.trim();
+                            if (val && !newClientServices.includes(val)) {
+                              setNewClientServices([...newClientServices, val]);
+                              setNewCustomServiceInput('');
+                            }
+                          }
+                        }}
+                        className="flex-1 bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all placeholder:text-slate-400 font-medium"
+                      />
+                      <button
+                        type="button"
+                        id="btn-add-new-custom-service"
+                        onClick={() => {
+                          const val = newCustomServiceInput.trim();
+                          if (val && !newClientServices.includes(val)) {
+                            setNewClientServices([...newClientServices, val]);
+                            setNewCustomServiceInput('');
+                          }
+                        }}
+                        disabled={!newCustomServiceInput.trim()}
+                        className="px-3.5 py-2.5 rounded-xl bg-[#fab518] hover:bg-[#fab518]/90 disabled:opacity-40 text-[#142142] font-bold text-xs transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                      >
+                        <Plus size={13} />
+                        <span>Adicionar</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Atalhos Rápidos */}
+                <div className="pt-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">
+                    <Sparkles size={12} className="text-[#fab518]" />
+                    <span>Clique para marcar / desmarcar rapidamente:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                    {allAvailableServices.map((srv, idx) => {
+                      const isSelected = newClientServices.includes(srv);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setNewClientServices(newClientServices.filter((s) => s !== srv));
+                            } else {
+                              setNewClientServices([...newClientServices, srv]);
+                            }
+                          }}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-[#fab518] text-[#142142] font-bold shadow-xs ring-1 ring-[#fab518]'
+                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-[#fab518] hover:text-[#142142] dark:hover:text-white'
+                          }`}
+                        >
+                          {isSelected ? <Check size={11} className="stroke-[3]" /> : <Plus size={11} />}
+                          <span>{srv}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {/* Seção: E-mails */}
@@ -1564,6 +1773,161 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                     <option value="Pausado">Pausado</option>
                     <option value="Cancelado">Cancelado</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Seção: Serviço(s) Contratado(s) */}
+              <div id="edit-client-services-section" className="p-4 sm:p-5 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-200/80 dark:border-amber-800/60 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Briefcase size={16} className="text-[#fab518]" />
+                    <label className="text-xs font-bold text-[#142142] dark:text-white uppercase tracking-wider">
+                      Serviço(s) Contratado(s)
+                    </label>
+                  </div>
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    {editServices.length} {editServices.length === 1 ? 'serviço contratado' : 'serviços contratados'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Selecione o serviço ou pacote de serviços contratados pelo cliente. Você pode escolher do catálogo, clicar nos atalhos ou adicionar um novo serviço personalizado.
+                </p>
+
+                {/* Serviços Atualmente Selecionados */}
+                {editServices.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {editServices.map((srv, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#142142] text-white dark:bg-slate-800 dark:text-white border border-[#fab518]/50 text-xs font-semibold shadow-xs"
+                      >
+                        <Check size={12} className="text-[#fab518] stroke-[3]" />
+                        <span>{srv}</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditServices(editServices.filter((_, i) => i !== idx))}
+                          className="ml-1 text-slate-300 hover:text-rose-400 cursor-pointer p-0.5 transition-colors"
+                          title={`Remover serviço ${srv}`}
+                          aria-label={`Remover ${srv}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-dashed border-amber-300 dark:border-amber-800/80 text-center">
+                    <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                      Nenhum serviço selecionado ainda. Escolha no seletor abaixo ou clique nos atalhos rápidos.
+                    </p>
+                  </div>
+                )}
+
+                {/* Seleção e Adição */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      Selecionar Serviço da Lista
+                    </label>
+                    <select
+                      id="select-edit-contracted-service"
+                      value=""
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        if (val && !editServices.includes(val)) {
+                          setEditServices([...editServices, val]);
+                        }
+                      }}
+                      className="w-full bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all cursor-pointer font-medium"
+                    >
+                      <option value="">+ Selecionar um serviço...</option>
+                      {allAvailableServices.map((srv, idx) => (
+                        <option
+                          key={idx}
+                          value={srv}
+                          disabled={editServices.includes(srv)}
+                        >
+                          {editServices.includes(srv) ? `✓ ${srv} (Contratado)` : srv}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      Ou Digite um Novo Serviço
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Ex: Gestão de TikTok, Copywriting..."
+                        value={editCustomServiceInput}
+                        onChange={(e) => setEditCustomServiceInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const val = editCustomServiceInput.trim();
+                            if (val && !editServices.includes(val)) {
+                              setEditServices([...editServices, val]);
+                              setEditCustomServiceInput('');
+                            }
+                          }
+                        }}
+                        className="flex-1 bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all placeholder:text-slate-400 font-medium"
+                      />
+                      <button
+                        type="button"
+                        id="btn-add-edit-custom-service"
+                        onClick={() => {
+                          const val = editCustomServiceInput.trim();
+                          if (val && !editServices.includes(val)) {
+                            setEditServices([...editServices, val]);
+                            setEditCustomServiceInput('');
+                          }
+                        }}
+                        disabled={!editCustomServiceInput.trim()}
+                        className="px-3.5 py-2.5 rounded-xl bg-[#fab518] hover:bg-[#fab518]/90 disabled:opacity-40 text-[#142142] font-bold text-xs transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                      >
+                        <Plus size={13} />
+                        <span>Adicionar</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Atalhos Rápidos */}
+                <div className="pt-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">
+                    <Sparkles size={12} className="text-[#fab518]" />
+                    <span>Clique para marcar / desmarcar rapidamente:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                    {allAvailableServices.map((srv, idx) => {
+                      const isSelected = editServices.includes(srv);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setEditServices(editServices.filter((s) => s !== srv));
+                            } else {
+                              setEditServices([...editServices, srv]);
+                            }
+                          }}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-[#fab518] text-[#142142] font-bold shadow-xs ring-1 ring-[#fab518]'
+                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-[#fab518] hover:text-[#142142] dark:hover:text-white'
+                          }`}
+                        >
+                          {isSelected ? <Check size={11} className="stroke-[3]" /> : <Plus size={11} />}
+                          <span>{srv}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

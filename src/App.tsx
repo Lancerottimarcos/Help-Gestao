@@ -2245,6 +2245,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           <ClientesView
             clients={clients}
             demands={demands}
+            services={services}
             onAddClient={handleAddClient}
             onUpdateClient={handleUpdateClient}
             onDeleteClient={handleDeleteClient}
@@ -2431,6 +2432,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           <PortalClienteView
             demands={demands}
             clients={clients}
+            services={services}
             invoices={invoices}
             columns={kanbanColumns}
             currentUser={effectiveUser}
@@ -2451,6 +2453,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
             <PortalClienteView
               demands={demands}
               clients={clients}
+              services={services}
               invoices={invoices}
               columns={kanbanColumns}
               currentUser={effectiveUser}
