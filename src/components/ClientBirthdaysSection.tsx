@@ -294,13 +294,12 @@ export const ClientBirthdaysSection: React.FC<ClientBirthdaysSectionProps> = ({
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base sm:text-lg font-black text-[#142142] dark:text-white tracking-tight">
+              <h3 className="text-base sm:text-lg font-bold text-[#142142] dark:text-white tracking-tight">
                 Aniversariantes de Clientes
               </h3>
               {todayCount > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 dark:bg-[#fab518]/20 text-[#142142] dark:text-[#fab518] border border-amber-300 dark:border-[#fab518]/40 animate-pulse">
-                  <Sparkles size={12} className="text-[#fab518]" />
-                  <span>{todayCount} Aniversariante{todayCount > 1 ? 's' : ''} Hoje!</span>
+                <span className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                  · {todayCount} comemorando hoje
                 </span>
               )}
             </div>
@@ -310,11 +309,10 @@ export const ClientBirthdaysSection: React.FC<ClientBirthdaysSectionProps> = ({
           </div>
         </div>
 
-        {/* Month indicator badge & Action to Clients View */}
-        <div className="flex items-center gap-2 self-start lg:self-auto">
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/90 px-3 py-1.5 rounded-full border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
-            <Calendar size={13} className="text-[#fab518]" />
-            <span>{currentMonthName} de {currentYear}</span>
+        {/* Month indicator & Action to Clients View */}
+        <div className="flex items-center gap-2.5 self-start lg:self-auto">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {currentMonthName} de {currentYear}
           </span>
 
           <button
@@ -377,7 +375,7 @@ export const ClientBirthdaysSection: React.FC<ClientBirthdaysSectionProps> = ({
               onClick={() => handleOpenMessageModal(todayBirthdays[0].client)}
               className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 text-[#142142] dark:text-white border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5"
             >
-              <Sparkles size={13} className="text-[#fab518]" />
+              <Gift size={13} className="text-[#fab518]" />
               <span>Ver Modelos</span>
             </button>
           </div>

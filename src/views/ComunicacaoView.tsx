@@ -94,7 +94,7 @@ export const ComunicacaoView: React.FC<ComunicacaoViewProps> = ({
       if (data.success && Array.isArray(data.channels) && data.channels.length > 0) {
         setChannels(data.channels);
       } else {
-        // Fallback garantido exatamente como na imagem
+        // Canais limpos para lançamento oficial
         setChannels([
           {
             id: 'criacao',
@@ -102,35 +102,23 @@ export const ComunicacaoView: React.FC<ComunicacaoViewProps> = ({
             description: 'Setor Criação',
             icon: 'Palette',
             unreadCount: 0,
-            lastMessage: {
-              content: 'Parabéns, time! Batemos a meta de propostas do mês.',
-              senderName: 'Camila Torres',
-              timestamp: '11:18',
-            }
+            lastMessage: null,
           },
           {
             id: 'atendimento',
             name: 'Atendimento',
             description: 'Setor Atendimento',
             icon: 'Building',
-            unreadCount: 6,
-            lastMessage: {
-              content: 'Parabéns, ti...',
-              senderName: 'Camila Torres',
-              timestamp: '11:18',
-            }
+            unreadCount: 0,
+            lastMessage: null,
           },
           {
             id: 'geral',
             name: 'Geral',
             description: 'Geral da equipe',
             icon: 'Users',
-            unreadCount: 22,
-            lastMessage: {
-              content: 'Ótima sema...',
-              senderName: 'Felipe Demo',
-              timestamp: '09:18',
-            }
+            unreadCount: 0,
+            lastMessage: null,
           }
         ]);
       }
@@ -144,53 +132,14 @@ export const ComunicacaoView: React.FC<ComunicacaoViewProps> = ({
     try {
       const res = await fetch(`/api/chat/messages?channelId=${encodeURIComponent(channelId)}`);
       const data = await res.json();
-      if (data.success && Array.isArray(data.messages) && data.messages.length > 0) {
+      if (data.success && Array.isArray(data.messages)) {
         setMessages(data.messages);
-      } else if (channelId === 'criacao') {
-        // Mensagens padrão da tela de referência
-        setMessages([
-          {
-            id: 'm1',
-            channelId: 'criacao',
-            senderId: 'juliana',
-            senderName: 'Juliana Prado',
-            senderRole: 'Designer Gráfico',
-            senderAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
-            content: 'Reunião com a Clínica Vitalis remarcada para amanhã às 10h.',
-            timestamp: Date.now() - 3600000 * 2,
-            createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-            timeFormatted: '09:47',
-          },
-          {
-            id: 'm2',
-            channelId: 'criacao',
-            senderId: 'marcos',
-            senderName: 'Marcos Lima',
-            senderRole: 'Redator',
-            senderAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
-            content: 'O contrato da Bella Moda foi assinado agora há pouco!',
-            timestamp: Date.now() - 3600000 * 1.5,
-            createdAt: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-            timeFormatted: '10:04',
-          },
-          {
-            id: 'm3',
-            channelId: 'criacao',
-            senderId: 'camila',
-            senderName: 'Camila Torres',
-            senderRole: 'Customer Success',
-            senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-            content: 'Parabéns, time! Batemos a meta de propostas do mês.',
-            timestamp: Date.now() - 3600000,
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-            timeFormatted: '11:18',
-          },
-        ]);
       } else {
         setMessages([]);
       }
     } catch (err) {
       console.error('Erro ao buscar mensagens:', err);
+      setMessages([]);
     }
   };
 
@@ -532,11 +481,8 @@ export const ComunicacaoView: React.FC<ComunicacaoViewProps> = ({
             {filteredChannels.map((channel, idx) => {
               const isActive = activeChannelId === channel.id;
               const unread = (channel as any).unreadCount || 0;
-              const lastMsgText = channel.lastMessage?.content || 
-                (channel.id === 'criacao' ? 'Camila Torres: Parabéns, time! ...' : 
-                 channel.id === 'atendimento' ? 'Camila Torres: Parabéns, ti...' : 'Felipe Demo: Ótima sema...');
-              const timestamp = channel.lastMessage?.timestamp || 
-                (channel.id === 'criacao' ? '11:18' : channel.id === 'atendimento' ? '11:18' : '09:18');
+              const lastMsgText = channel.lastMessage?.content || 'Nenhuma mensagem recente';
+              const timestamp = channel.lastMessage?.timestamp || '';
 
               return (
                 <div key={channel.id}>

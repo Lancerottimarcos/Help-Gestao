@@ -1,4 +1,5 @@
 import { Client, DemandItem, Service, BudgetProposal, Invoice, ClientActivity, TeamMember, KanbanColumn } from '../types';
+import { fetchFirestoreData, saveFirestoreData } from '../lib/firebaseClient';
 
 export interface AppDatabasePayload {
   clients?: Client[];
@@ -334,24 +335,36 @@ export const serverDbService = {
   },
 
   /**
-   * Busca os dados compartilhados do servidor da aplicação
+   * Busca os dados compartilhados do servidor da aplicação e do Google Cloud Firestore
    */
   async fetchDatabase(): Promise<AppDatabasePayload | null> {
     try {
       const res = await fetch('/api/database');
-      if (!res.ok) return null;
-      const json: DatabaseApiResponse = await res.json();
-      if (json.success && json.data) {
-        return json.data;
+      if (res.ok) {
+        const json: DatabaseApiResponse = await res.json();
+        if (json.success && json.data) {
+          return json.data;
+        }
       }
     } catch (err) {
       console.warn('Servidor central não respondeu ao fetchDatabase:', err);
     }
+
+    // Fallback de alta disponibilidade: consulta diretamente o Google Cloud Firestore
+    try {
+      const firestoreData = await fetchFirestoreData('agency_data', 'main_state');
+      if (firestoreData && typeof firestoreData === 'object') {
+        return firestoreData as AppDatabasePayload;
+      }
+    } catch (err) {
+      console.warn('Fallback do Firestore não respondeu ao fetchDatabase:', err);
+    }
+
     return null;
   },
 
   /**
-   * Salva os dados no servidor da aplicação de forma persistente (compartilhada entre navegadores e computadores)
+   * Salva os dados no servidor da aplicação e no Firestore de forma persistente (compartilhada entre navegadores e computadores)
    * Utiliza debounce para evitar requisições em cascata.
    */
   saveDatabase(payload: Partial<AppDatabasePayload>, immediate = false): Promise<boolean> {
@@ -371,20 +384,32 @@ export const serverDbService = {
           };
           pendingPayload = {};
 
-          const res = await fetch('/api/database', {
+          // 1. Grava no servidor central (/api/database)
+          const fetchPromise = fetch('/api/database', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(bodyToSend),
+          }).catch((err) => {
+            console.warn('Erro ao salvar no servidor central:', err);
+            return null;
           });
 
-          if (res.ok) {
+          // 2. Grava simultaneamente e de forma redundante no Google Cloud Firestore
+          const firestorePromise = saveFirestoreData(bodyToSend, 'agency_data', 'main_state').catch((err) => {
+            console.warn('Erro ao persistir no Firestore:', err);
+            return false;
+          });
+
+          const [res, fsSuccess] = await Promise.all([fetchPromise, firestorePromise]);
+
+          if ((res && res.ok) || fsSuccess) {
             resolve(true);
             return;
           }
         } catch (err) {
-          console.warn('Erro ao salvar no servidor central:', err);
+          console.warn('Erro no executeSave da base de dados:', err);
         }
         resolve(false);
       };

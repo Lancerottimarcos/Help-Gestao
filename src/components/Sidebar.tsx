@@ -23,7 +23,8 @@ import {
   MessageSquare,
   CalendarClock,
   BarChart3,
-  CheckCircle2
+  CheckCircle2,
+  LayoutGrid
 } from 'lucide-react';
 import { PageId, UserProfile, Client, DemandItem } from '../types';
 import { currentUser } from '../data/mockData';
@@ -333,6 +334,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: NavItemConfig[] = isClientRole
     ? [
         {
+          id: 'portal-cliente',
+          label: 'Meu Portal',
+          icon: LayoutGrid,
+        },
+        {
           id: 'aprovacoes',
           label: 'Aprovações',
           icon: CheckCircle2,
@@ -350,6 +356,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'clientes',
           label: 'Clientes',
           icon: Users,
+        },
+        {
+          id: 'portal-cliente',
+          label: 'Portal do Cliente',
+          icon: LayoutGrid,
         },
         {
           id: 'demandas',
@@ -375,11 +386,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'comunicacao',
           label: 'Comunicação',
           icon: MessageSquare,
-        },
-        {
-          id: 'portal-cliente',
-          label: 'Portal do Cliente',
-          icon: Sparkles,
         },
         {
           id: 'configuracoes',
@@ -490,7 +496,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
 
-            {navItems.map((item) => {
+            {navItems.map((item, idx) => {
               const Icon = item.icon;
               const isDemandas = item.id === 'demandas';
               const isProducao = item.id === 'producao';
@@ -527,7 +533,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               const showGestaoInline = !isCollapsed && (isGestaoExpanded || isGestaoMobileExpanded || isGestaoActive);
 
               return (
-                <React.Fragment key={item.id}>
+                <React.Fragment key={`nav-item-${item.id}-${idx}`}>
                   <button
                     ref={isProducao ? producaoBtnRef : isGestao ? gestaoBtnRef : undefined}
                     id={`nav-link-${item.id}`}

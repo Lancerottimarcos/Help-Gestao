@@ -40,33 +40,33 @@ export const DASHBOARD_PRESETS: DashboardCustomizerPreset[] = [
   {
     id: 'padrao',
     name: 'Completo (Padrão)',
-    badge: '6 seções',
-    description: 'Todas as seções visíveis no fluxo balanceado com stories de demandas',
-    order: ['welcome', 'demandas_stories', 'indicadores', 'prioridades', 'aniversariantes', 'mapa'],
+    badge: '5 seções',
+    description: 'Todas as seções operacionais visíveis com stories de demandas',
+    order: ['welcome', 'demandas_stories', 'prioridades', 'aniversariantes', 'mapa'],
     hidden: [],
   },
   {
     id: 'operacional',
     name: 'Foco Operacional',
-    badge: '4 seções',
-    description: 'Prioriza stories de atualizações, indicadores e kanban',
-    order: ['demandas_stories', 'indicadores', 'prioridades', 'welcome', 'aniversariantes', 'mapa'],
+    badge: '3 seções',
+    description: 'Prioriza stories de atualizações, entregas e kanban',
+    order: ['demandas_stories', 'prioridades', 'welcome', 'aniversariantes', 'mapa'],
     hidden: ['aniversariantes', 'mapa'],
   },
   {
     id: 'crm',
     name: 'Gestão & Clientes',
-    badge: '5 seções',
+    badge: '4 seções',
     description: 'Foco em relacionamento, stories das contas, aniversariantes e mapa',
-    order: ['welcome', 'demandas_stories', 'indicadores', 'aniversariantes', 'mapa', 'prioridades'],
+    order: ['welcome', 'demandas_stories', 'aniversariantes', 'mapa', 'prioridades'],
     hidden: ['prioridades'],
   },
   {
     id: 'essencial',
     name: 'Visão Compacta',
-    badge: '3 seções',
-    description: 'Apenas boas-vindas, stories de atualizações e KPIs principais',
-    order: ['welcome', 'demandas_stories', 'indicadores', 'prioridades', 'aniversariantes', 'mapa'],
+    badge: '2 seções',
+    description: 'Apenas boas-vindas e stories de atualizações',
+    order: ['welcome', 'demandas_stories', 'prioridades', 'aniversariantes', 'mapa'],
     hidden: ['aniversariantes', 'mapa', 'prioridades'],
   },
 ];
@@ -172,8 +172,6 @@ export const DashboardCustomizerModal: React.FC<DashboardCustomizerModalProps> =
         return <Calendar size={18} className="text-[#fab518]" />;
       case 'demandas_stories':
         return <Sparkles size={18} className="text-[#e4405f]" />;
-      case 'indicadores':
-        return <Layers size={18} className="text-blue-500" />;
       case 'aniversariantes':
         return <Cake size={18} className="text-amber-500" />;
       case 'mapa':

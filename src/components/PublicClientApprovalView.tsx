@@ -1,27 +1,19 @@
 import React, { useState } from 'react';
 import { 
   Check, 
-  ThumbsUp, 
-  ThumbsDown, 
-  Edit3, 
-  Building2, 
-  Calendar, 
   Clock, 
-  Eye, 
   CheckCircle2, 
   AlertCircle, 
-  XCircle, 
+  MessageSquare, 
+  Maximize2, 
+  ChevronLeft, 
+  ChevronRight, 
+  Instagram, 
+  Lock, 
   Sparkles,
-  MessageSquare,
-  Maximize2,
-  Film,
-  Image as ImageIcon,
-  ShieldCheck,
-  ArrowRight,
-  Lock,
-  ExternalLink
+  Edit3
 } from 'lucide-react';
-import { DemandItem, Client, DemandAttachment } from '../types';
+import { DemandItem, Client } from '../types';
 import { detectAndSanitizeInput } from '../utils/securityProtocols';
 
 interface PublicClientApprovalViewProps {
@@ -47,28 +39,25 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
   const client = demand ? clients.find((c) => c.companyName === demand.client || c.name === demand.client) : null;
 
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
-  const [isChangeFormOpen, setIsChangeFormOpen] = useState(false);
-  const [changeText, setChangeText] = useState('');
-  const [isRejectConfirmOpen, setIsRejectConfirmOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
+  const [commentText, setCommentText] = useState('Amei! Ficou excelente.');
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   if (!demand) {
     return (
-      <div className="min-h-screen bg-[#0a1224] text-white flex flex-col items-center justify-center p-4 sm:p-6 text-center">
-        <div className="w-full max-w-md bg-[#142142] border border-[#1d2e56] rounded-3xl p-8 space-y-5 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+      <div className="min-h-screen bg-[#EEF0F4] dark:bg-[#0c1220] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 text-center font-sans">
+        <div className="w-full max-w-md bg-white dark:bg-[#121827] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 space-y-5 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-[#ff9900] flex items-center justify-center mx-auto">
             <AlertCircle size={32} />
           </div>
-          <h2 className="text-xl font-bold text-white">Demanda Não Encontrada</h2>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            O link de aprovação com o identificador <span className="font-mono text-amber-400 font-bold">"{demandId}"</span> não foi localizado ou foi concluído e arquivado pela equipe da agência.
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Demanda Não Encontrada</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            O link de aprovação com o identificador <span className="font-mono text-[#ff9900] font-bold">"{demandId}"</span> não foi localizado ou já foi arquivado.
           </p>
           <button
             type="button"
             onClick={onGoToAdminLogin}
-            className="w-full py-3 rounded-xl bg-[#fab518] hover:bg-[#fab518]/90 text-[#142142] font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+            className="w-full py-3 rounded-full bg-[#ff9900] hover:bg-[#e68a00] text-[#142142] font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
           >
             <Lock size={15} />
             <span>Acessar Painel da Agência</span>
@@ -78,7 +67,7 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
     );
   }
 
-  // Regra: Mostrar a demanda no portal do cliente, somente quando a demanda estiver na coluna Aprovação Cliente
+  // Regra: Mostrar a demanda no portal do cliente somente quando estiver na coluna Aprovação Cliente ou aprovada
   const isApprovalCol = 
     demand.columnId === 'aprovacao' || 
     demand.columnId === 'aprovacao-cliente' || 
@@ -88,19 +77,19 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
 
   if (!isApprovalCol && !isApproved) {
     return (
-      <div className="min-h-screen bg-[#0a1224] text-white flex flex-col items-center justify-center p-4 sm:p-6 text-center">
-        <div className="w-full max-w-md bg-[#142142] border border-[#1d2e56] rounded-3xl p-8 space-y-5 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+      <div className="min-h-screen bg-[#EEF0F4] dark:bg-[#0c1220] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 text-center font-sans">
+        <div className="w-full max-w-md bg-white dark:bg-[#121827] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 space-y-5 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-[#ff9900] flex items-center justify-center mx-auto">
             <Clock size={32} />
           </div>
-          <h2 className="text-xl font-bold text-white">Demanda em Produção</h2>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Esta demanda ainda está em fase interna de planejamento e produção na agência. Ela estará disponível no portal do cliente assim que for movida para a coluna <strong className="text-amber-400">Aprovação Cliente</strong>.
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Demanda em Produção</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Esta demanda ainda está em fase interna de planejamento e produção na agência. Ela ficará visível assim que for encaminhada para a coluna <strong className="text-[#ff9900]">Aprovação Cliente</strong>.
           </p>
           <button
             type="button"
             onClick={onGoToAdminLogin}
-            className="w-full py-3 rounded-xl bg-[#fab518] hover:bg-[#fab518]/90 text-[#142142] font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+            className="w-full py-3 rounded-full bg-[#ff9900] hover:bg-[#e68a00] text-[#142142] font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
           >
             <Lock size={15} />
             <span>Acessar Painel da Agência</span>
@@ -110,14 +99,21 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
     );
   }
 
-  const clientCompany = client?.companyName || demand.client;
-  const contactName = client?.contactName || client?.name || 'Cliente';
+  const clientName = client?.companyName || client?.name || demand.client || 'Portal Publicitário';
+  
+  // Iniciais do cliente (ex: PP para Portal Publicitário)
+  const clientInitials = (() => {
+    const raw = clientName.trim().split(/\s+/).filter(Boolean);
+    if (raw.length >= 2) return `${raw[0][0]}${raw[1][0]}`.toUpperCase();
+    return clientName.slice(0, 2).toUpperCase();
+  })();
 
-  // Attachments or fallback thumbnail
+  // Attachments or fallback media list
   const mediaItems = (demand.attachments || []).filter(
     (a) => a.type === 'image' || a.type === 'video'
   );
 
+  // Fallback visual com layout fiel ao mockup (Flamengo / arte esportiva ou thumbnail existente)
   const effectiveMedia = mediaItems.length > 0
     ? mediaItems
     : (demand.thumbnail ? [{
@@ -127,334 +123,298 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
         type: 'image',
         url: demand.thumbnail,
         uploadedAt: 'Versão para aprovação',
-      }] : []);
+      }] : [
+        {
+          id: 'slide-1',
+          name: 'Lâmina 1 - Mockup Principal.jpg',
+          size: 1024 * 1024,
+          type: 'image',
+          url: 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=1000',
+          uploadedAt: 'Versão para aprovação',
+        },
+        {
+          id: 'slide-2',
+          name: 'Lâmina 2 - Detalhes do Design.jpg',
+          size: 1024 * 1024,
+          type: 'image',
+          url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=1000',
+          uploadedAt: 'Versão para aprovação',
+        },
+        {
+          id: 'slide-3',
+          name: 'Lâmina 3 - Encerramento & CTA.jpg',
+          size: 1024 * 1024,
+          type: 'image',
+          url: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&q=80&w=1000',
+          uploadedAt: 'Versão para aprovação',
+        }
+      ]);
 
-  const currentMedia = effectiveMedia[activeMediaIndex] || effectiveMedia[0] || null;
+  const totalSlides = effectiveMedia.length;
+  const currentMedia = effectiveMedia[activeMediaIndex] || effectiveMedia[0];
+
+  const handlePrevSlide = () => {
+    setActiveMediaIndex((prev) => (prev > 0 ? prev - 1 : totalSlides - 1));
+  };
+
+  const handleNextSlide = () => {
+    setActiveMediaIndex((prev) => (prev < totalSlides - 1 ? prev + 1 : 0));
+  };
 
   const handleApproveClick = () => {
     onApprove(demand.id);
-    setActionSuccessMessage('Material Aprovado com sucesso! A agência foi avisada.');
-    setIsChangeFormOpen(false);
-    setIsRejectConfirmOpen(false);
+    setActionSuccessMessage('Material aprovado com sucesso! A agência foi avisada.');
   };
 
-  const handleRejectClick = () => {
-    const rawReason = rejectReason.trim();
-    const sanitizedReason = rawReason ? detectAndSanitizeInput(rawReason, 'Portal do Cliente: Motivo Reprovação').sanitized : undefined;
-    onReject(demand.id, sanitizedReason);
-    setActionSuccessMessage('Demanda marcada como Reprovada. A equipe criativa foi notificada para elaborar uma nova proposta.');
-    setIsRejectConfirmOpen(false);
-  };
-
-  const handleSubmitChange = (e: React.FormEvent) => {
-    e.preventDefault();
-    const rawText = changeText.trim();
-    if (!rawText) return;
-
-    const sanitizedFeedback = detectAndSanitizeInput(rawText, 'Portal do Cliente: Solicitação de Ajuste').sanitized;
+  const handleRequestAdjustments = () => {
+    const rawText = commentText.trim();
+    if (!rawText) {
+      alert('Por favor, informe seu comentário ou o que gostaria de ajustar no material.');
+      return;
+    }
+    const sanitizedFeedback = detectAndSanitizeInput(rawText, 'Link de Aprovação: Solicitação de Ajuste').sanitized;
     onRequestChange(demand.id, sanitizedFeedback);
-    setActionSuccessMessage('Sua solicitação de alteração foi registrada! O material retornou para os designers com seus apontamentos.');
-    setIsChangeFormOpen(false);
+    setActionSuccessMessage('Sua solicitação de ajuste foi enviada com sucesso para a agência.');
   };
+
+  const placementLabel = demand.type === 'Stories' ? 'Stories' : demand.type === 'Carrossel' ? 'Carrossel' : 'Feed';
+  const scheduledDate = demand.dueDate || '12/10 às 18:00';
 
   return (
-    <div className="min-h-screen bg-[#0a1224] text-slate-100 flex flex-col font-sans selection:bg-[#fab518] selection:text-[#142142]">
-      {/* Top Client Navbar */}
-      <header className="w-full bg-[#142142]/90 backdrop-blur-md border-b border-[#1d2e56] py-3.5 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
+    <div className="min-h-screen bg-[#EEF0F4] dark:bg-[#090d18] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-[#ff9900] selection:text-[#142142]">
+      
+      {/* 1. TOP MINIMALIST HEADER: AF Agência Farol • Link de aprovação (bbbbb.png) */}
+      <header className="w-full px-6 sm:px-12 py-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img
-            src="/icone-help.png"
-            alt="Help Ideias Digitais"
-            className="h-9 w-auto object-contain"
-          />
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#fab518] flex items-center gap-1">
-              <ShieldCheck size={12} />
-              <span>Portal Seguro do Cliente</span>
+          {/* Logo Circular Escuro "AF" */}
+          <div className="w-9 h-9 rounded-full bg-[#12151e] text-white flex items-center justify-center font-black text-xs tracking-tight shadow-xs shrink-0">
+            AF
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="font-extrabold text-slate-900 dark:text-white text-base tracking-tight">
+              Agência Farol
             </span>
-            <p className="text-xs font-bold text-white">Help Ideias Digitais</p>
+            <span className="text-slate-400 dark:text-slate-500 text-xs font-normal">
+              Link de aprovação
+            </span>
           </div>
         </div>
 
         <button
           type="button"
           onClick={onGoToAdminLogin}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-semibold text-slate-300 hover:text-white transition-all cursor-pointer"
+          className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors cursor-pointer"
         >
-          <Lock size={12} className="text-[#fab518]" />
-          <span>Área Administrativa</span>
+          Área restrita
         </button>
       </header>
 
-      {/* Main Approval Body */}
-      <main className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Success Banner */}
+      {/* 2. MAIN 2-COLUMN APPROVAL STAGE (DESIGN EXATO DA IMAGEM bbbbb.png) */}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 py-4 sm:py-8 flex flex-col justify-center">
+        
+        {/* Toast / Alerta de Sucesso */}
         {actionSuccessMessage && (
-          <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-3 animate-in fade-in shadow-lg">
-            <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
-            <p className="font-semibold">{actionSuccessMessage}</p>
+          <div className="mb-6 p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2.5 animate-in fade-in shadow-xs">
+            <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{actionSuccessMessage}</span>
           </div>
         )}
 
-        {/* Header Card */}
-        <div className="bg-[#142142] border border-[#1d2e56] rounded-3xl p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full bg-[#fab518]/20 text-[#fab518] text-[10px] font-black tracking-wide uppercase">
-                {demand.id}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+          
+          {/* ---------------------------------------------------------------- */}
+          {/* COLUNA ESQUERDA: CARD VISUAL DA PEÇA (MOCKUP / ARTWORK)          */}
+          {/* ---------------------------------------------------------------- */}
+          <div className="lg:col-span-5 flex flex-col items-center">
+            <div className="w-full max-w-[420px] aspect-[4/5] rounded-[32px] sm:rounded-[36px] overflow-hidden shadow-xl border border-slate-200/90 dark:border-slate-800/80 bg-gradient-to-b from-[#fbf8f3] via-[#ffedd5] to-[#f97316] relative flex flex-col justify-between group">
+              
+              {/* Badge Contador de Lâmina: 1/3 (Top-Right) */}
+              <div className="absolute top-4 right-4 z-20 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-xs font-black tracking-wider shadow-xs">
+                {activeMediaIndex + 1}/{totalSlides}
+              </div>
+
+              {/* Botão de Expandir Lightbox */}
+              {currentMedia?.url && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(currentMedia.url)}
+                  className="absolute bottom-4 left-4 z-20 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                  title="Ampliar imagem"
+                >
+                  <Maximize2 size={15} />
+                </button>
+              )}
+
+              {/* Controles de Navegação do Carrossel */}
+              {totalSlides > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePrevSlide}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                    title="Slide anterior"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextSlide}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                    title="Próximo slide"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </>
+              )}
+
+              {/* Imagem do Post ou Ilustração Mockup */}
+              <div 
+                className="w-full h-full relative cursor-pointer flex flex-col justify-between p-6 sm:p-7 text-center overflow-hidden"
+                onClick={totalSlides > 1 ? handleNextSlide : undefined}
+              >
+                {currentMedia?.url ? (
+                  <img
+                    src={currentMedia.url}
+                    alt={demand.title}
+                    className="absolute inset-0 w-full h-full object-cover rounded-[32px] sm:rounded-[36px]"
+                  />
+                ) : (
+                  <div className="absolute inset-0 w-full h-full flex flex-col justify-between p-6 sm:p-7 bg-gradient-to-b from-[#fbf8f3] via-[#ffedd5] to-[#f97316] text-[#142142]">
+                    <div className="pt-8">
+                      <p className="text-xl sm:text-2xl font-black uppercase tracking-tight text-[#142142]">
+                        {demand.title}
+                      </p>
+                    </div>
+                    <div className="pb-4">
+                      <p className="text-xs text-slate-800 font-medium">
+                        {demand.description || 'Mockup para aprovação da agência'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Indicador de Bolinhas do Carrossel */}
+            {totalSlides > 1 && (
+              <div className="flex items-center gap-1.5 pt-3">
+                {effectiveMedia.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveMediaIndex(idx)}
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                      activeMediaIndex === idx 
+                        ? 'w-6 bg-[#ff9900]' 
+                        : 'w-1.5 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ---------------------------------------------------------------- */}
+          {/* COLUNA DIREITA: INFORMAÇÕES DO POST & DECISÃO DO CLIENTE          */}
+          {/* ---------------------------------------------------------------- */}
+          <div className="lg:col-span-7 flex flex-col justify-center space-y-5">
+            
+            {/* 1. Meta Row: [PP] Portal Publicitário • [Icon] Feed • 12/10 às 18:00 */}
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
+              {/* Badge Circular Laranja do Cliente */}
+              <div className="w-7 h-7 rounded-full bg-[#ff9900] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                {clientInitials}
+              </div>
+              <span className="font-bold text-slate-900 dark:text-white text-sm">
+                {clientName}
               </span>
-              <span className="text-xs text-slate-400 flex items-center gap-1">
-                <Building2 size={13} className="text-[#fab518]" />
-                {clientCompany}
+              <span className="text-slate-400">·</span>
+              <div className="flex items-center gap-1 font-medium text-slate-600 dark:text-slate-300">
+                <Instagram size={14} className="text-slate-500" />
+                <span>{placementLabel}</span>
+              </div>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-500 dark:text-slate-400 font-medium">
+                {scheduledDate}
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+
+            {/* 2. Título do Post (Flamengo: camisa feita pelo público) */}
+            <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-black text-slate-900 dark:text-white tracking-tight leading-snug">
               {demand.title}
             </h1>
-            {demand.description && (
-              <p className="text-xs text-slate-300 leading-relaxed pt-1">
-                {demand.description}
-              </p>
-            )}
-          </div>
 
-          <div className="flex items-center gap-3 shrink-0">
-            {(demand.approvalStatus === 'aprovado' || demand.columnId === 'agendamento') && (
-              <span className="px-3.5 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black flex items-center gap-1.5">
-                <CheckCircle2 size={15} />
-                <span>Aprovado (Agendamento)</span>
-              </span>
-            )}
-            {demand.approvalStatus === 'alteracao_solicitada' && (
-              <span className="px-3.5 py-1.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black flex items-center gap-1.5">
-                <Edit3 size={15} />
-                <span>Ajuste Solicitado</span>
-              </span>
-            )}
-            {demand.approvalStatus === 'reprovado' && (
-              <span className="px-3.5 py-1.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 text-xs font-black flex items-center gap-1.5">
-                <XCircle size={15} />
-                <span>Reprovado</span>
-              </span>
-            )}
-            {(!demand.approvalStatus || demand.approvalStatus === 'pendente') && (
-              <span className="px-3.5 py-1.5 rounded-full bg-[#fab518]/20 text-[#fab518] border border-[#fab518]/40 text-xs font-black flex items-center gap-1.5">
-                <Clock size={15} />
-                <span>Aguardando sua Validação</span>
-              </span>
-            )}
-          </div>
-        </div>
+            {/* 3. Descrição / Legenda do Post */}
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
+              {demand.description || 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.'}
+            </p>
 
-        {/* Media Player / Viewer */}
-        <div className="bg-[#142142] border border-[#1d2e56] rounded-3xl p-4 sm:p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
-              <Eye size={15} className="text-[#fab518]" />
-              <span>Peça Criativa para Avaliação</span>
-            </span>
-            {effectiveMedia.length > 1 && (
-              <span className="text-xs text-slate-400">
-                {activeMediaIndex + 1} de {effectiveMedia.length} arquivos
-              </span>
-            )}
-          </div>
-
-          {currentMedia ? (
-            <div className="relative rounded-2xl overflow-hidden bg-black/60 border border-white/10 flex items-center justify-center min-h-[360px] max-h-[540px]">
-              {currentMedia.type === 'video' ? (
-                <video
-                  src={currentMedia.url}
-                  controls
-                  className="max-h-[520px] w-auto max-w-full rounded-xl"
-                />
-              ) : currentMedia.url?.trim() ? (
-                <img
-                  src={currentMedia.url}
-                  alt={currentMedia.name}
-                  className="max-h-[520px] w-auto max-w-full object-contain rounded-xl cursor-zoom-in"
-                  onClick={() => setLightboxUrl(currentMedia.url)}
-                />
+            {/* 4. Status Capsule: [Relógio] Aguardando sua aprovação */}
+            <div>
+              {isApproved ? (
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-600 text-white text-xs font-semibold shadow-xs">
+                  <CheckCircle2 size={14} className="stroke-[2.5]" />
+                  <span>Aprovado para agendamento</span>
+                </div>
+              ) : demand.approvalStatus === 'alteracao_solicitada' ? (
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-xs">
+                  <Edit3 size={14} className="stroke-[2.5]" />
+                  <span>Ajustes solicitados à agência</span>
+                </div>
               ) : (
-                <div className="w-full h-[300px] flex items-center justify-center text-slate-400">
-                  <ImageIcon size={32} />
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#8E99A8] text-white text-xs font-semibold shadow-xs">
+                  <Clock size={14} className="stroke-[2.5]" />
+                  <span>Aguardando sua aprovação</span>
                 </div>
               )}
+            </div>
 
-              {currentMedia.type === 'image' && (
-                <button
-                  type="button"
-                  onClick={() => setLightboxUrl(currentMedia.url)}
-                  className="absolute bottom-3 right-3 p-2 rounded-xl bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition-all cursor-pointer"
-                  title="Expandir Imagem"
-                >
-                  <Maximize2 size={16} />
-                </button>
-              )}
+            {/* 5. Caixa de Comentário para a Agência (bbbbb.png) */}
+            <div className="bg-white dark:bg-[#121827] rounded-[24px] p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-[#ff9900]/40 transition-all">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-400 mb-2">
+                <MessageSquare size={14} className="text-slate-500" />
+                <span>Comentário para a agência</span>
+              </div>
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Amei! Ficou excelente... Ou escreva instruções de alteração"
+                rows={2}
+                className="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none font-normal leading-relaxed"
+              />
             </div>
-          ) : (
-            <div className="p-12 text-center text-slate-400 space-y-2">
-              <ImageIcon size={36} className="mx-auto text-slate-500" />
-              <p className="text-xs">Nenhum anexo visual carregado nesta versão.</p>
-            </div>
-          )}
 
-          {/* Thumbnails if multiple */}
-          {effectiveMedia.length > 1 && (
-            <div className="flex items-center gap-2 overflow-x-auto py-2">
-              {effectiveMedia.map((m, idx) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setActiveMediaIndex(idx)}
-                  className={`w-16 h-16 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
-                    activeMediaIndex === idx
-                      ? 'border-[#fab518] scale-105'
-                      : 'border-white/10 opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  {m.type === 'video' ? (
-                    <div className="w-full h-full bg-slate-800 flex items-center justify-center text-white">
-                      <Film size={20} />
-                    </div>
-                  ) : m.url?.trim() ? (
-                    <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-slate-800 flex items-center justify-center text-slate-400">
-                      <ImageIcon size={14} />
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Change Request Form */}
-        {isChangeFormOpen && (
-          <form onSubmit={handleSubmitChange} className="bg-[#142142] border border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-3 animate-in fade-in">
-            <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
-              <Edit3 size={16} />
-              <span>Quais alterações você gostaria de solicitar?</span>
-            </div>
-            <p className="text-xs text-slate-300">
-              Descreva em detalhes o que deve ser ajustado no texto, cores, elementos visuais ou formato.
-            </p>
-            <textarea
-              rows={3}
-              value={changeText}
-              onChange={(e) => setChangeText(e.target.value)}
-              placeholder="Ex: Por favor trocar a foto do fundo, ajustar o telefone no rodapé e alterar a chamada principal para..."
-              className="w-full bg-[#0a1224] text-xs text-white p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-[#fab518]"
-              autoFocus
-            />
-            <div className="flex items-center justify-end gap-2 pt-1">
+            {/* 6. Botões de Ação: [Pedir ajustes]  [✓ Aprovar] (bbbbb.png) */}
+            <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setIsChangeFormOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all cursor-pointer"
+                onClick={handleRequestAdjustments}
+                className="px-6 sm:px-7 py-3 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold text-sm shadow-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
               >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-[#fab518] hover:bg-[#fab518]/90 text-[#142142] font-black text-xs transition-all cursor-pointer shadow-md"
-              >
-                Enviar Solicitação de Ajustes
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Rejection Form */}
-        {isRejectConfirmOpen && (
-          <div className="bg-[#142142] border border-red-500/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-3 animate-in fade-in">
-            <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
-              <XCircle size={16} />
-              <span>Confirmar Reprovação da Peça</span>
-            </div>
-            <p className="text-xs text-slate-300">
-              Ao reprovar, a agência criará uma proposta completamente diferente. Informe o motivo principal:
-            </p>
-            <input
-              type="text"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Ex: O conceito visual não está de acordo com o briefing inicial"
-              className="w-full bg-[#0a1224] text-xs text-white p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-red-500"
-              autoFocus
-            />
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setIsRejectConfirmOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all cursor-pointer"
-              >
-                Voltar
-              </button>
-              <button
-                type="button"
-                onClick={handleRejectClick}
-                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-all cursor-pointer shadow-md"
-              >
-                Confirmar Reprovação
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        {!isChangeFormOpen && !isRejectConfirmOpen && (
-          <div className="bg-[#142142] border border-[#1d2e56] rounded-3xl p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold text-white">Sua Decisão para Esta Peça</p>
-              <p className="text-[11px] text-slate-400">
-                Olá <span className="text-[#fab518] font-semibold">{contactName}</span>, selecione abaixo como deseja proceder.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRejectConfirmOpen(true);
-                  setIsChangeFormOpen(false);
-                }}
-                className="flex-1 sm:flex-none px-4 py-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <ThumbsDown size={15} />
-                <span>Reprovar</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsChangeFormOpen(true);
-                  setIsRejectConfirmOpen(false);
-                }}
-                className="flex-1 sm:flex-none px-4 py-3 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <Edit3 size={15} />
-                <span>Solicitar Ajustes</span>
+                Pedir ajustes
               </button>
 
               <button
                 type="button"
                 onClick={handleApproveClick}
-                className="flex-1 sm:flex-none px-6 py-3 rounded-2xl bg-[#fab518] hover:bg-[#fab518]/90 text-[#142142] font-black text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-[#fab518]/20"
+                className="px-7 sm:px-8 py-3 rounded-full bg-[#ff9900] hover:bg-[#e68a00] text-[#142142] font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-2 active:scale-95"
               >
-                <ThumbsUp size={16} />
-                <span>Aprovar Material</span>
+                <Check size={18} className="stroke-[3]" />
+                <span>Aprovar</span>
               </button>
             </div>
+
           </div>
-        )}
+
+        </div>
+
       </main>
 
-      {/* Lightbox Modal */}
-      {lightboxUrl?.trim() && (
+      {/* Lightbox / Imagem em Tela Cheia */}
+      {lightboxUrl && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer animate-in fade-in"
           onClick={() => setLightboxUrl(null)}
         >
           <img
@@ -465,10 +425,11 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="w-full py-5 px-4 text-center text-[11px] text-slate-500 border-t border-white/5 mt-auto">
-        <p>© {new Date().getFullYear()} Help Ideias Digitais - Sistema de Gestão & Aprovação Segura</p>
+      {/* Rodapé Minimalista */}
+      <footer className="w-full py-4 text-center text-xs text-slate-400 dark:text-slate-500">
+        <p>© {new Date().getFullYear()} Help Ideias Digitais • Link Seguro de Aprovação</p>
       </footer>
+
     </div>
   );
 };

@@ -36,7 +36,8 @@ import {
   ShieldAlert,
   RefreshCw,
   Search,
-  Layers
+  Layers,
+  Compass
 } from 'lucide-react';
 import { Client, DemandItem, KanbanColumn, PageId, ClientActivity, InicioSectionId, InicioSectionMeta, Invoice, TeamMember } from '../types';
 import { ClientLocationMap } from '../components/ClientLocationMap';
@@ -236,7 +237,6 @@ const COLUMN_CONFIG: Record<string, { label: string; color: string; badge: strin
 const DEFAULT_SECTIONS: InicioSectionId[] = [
   'welcome',
   'demandas_stories',
-  'indicadores',
   'prioridades',
   'aniversariantes',
   'mapa',
@@ -256,13 +256,6 @@ const SECTIONS_META: Record<InicioSectionId, InicioSectionMeta> = {
     shortLabel: 'Stories das Contas',
     description: 'Carrossel estilo Stories do Instagram com novidades e movimentações das contas',
     iconName: 'sparkles',
-  },
-  indicadores: {
-    id: 'indicadores',
-    title: 'Indicadores Principais do Mês',
-    shortLabel: 'Indicadores',
-    description: 'Demandas ativas, receita recorrente (MRR) e novos clientes',
-    iconName: 'layers',
   },
   aniversariantes: {
     id: 'aniversariantes',
@@ -294,9 +287,9 @@ const loadSavedOrder = (): InicioSectionId[] => {
   try {
     const saved = localStorage.getItem(STORAGE_ORDER_KEY);
     if (!saved) return DEFAULT_SECTIONS;
-    const parsed = JSON.parse(saved) as InicioSectionId[];
+    const parsed = JSON.parse(saved) as any[];
     if (Array.isArray(parsed) && parsed.length > 0) {
-      const validSections = parsed.filter((id) => DEFAULT_SECTIONS.includes(id));
+      const validSections = parsed.filter((id) => id !== 'indicadores' && DEFAULT_SECTIONS.includes(id as InicioSectionId)) as InicioSectionId[];
       if (!validSections.includes('demandas_stories')) {
         const welcomeIndex = validSections.indexOf('welcome');
         if (welcomeIndex !== -1) {
@@ -318,9 +311,9 @@ const loadSavedHidden = (): InicioSectionId[] => {
   try {
     const saved = localStorage.getItem(STORAGE_HIDDEN_KEY);
     if (!saved) return [];
-    const parsed = JSON.parse(saved) as InicioSectionId[];
+    const parsed = JSON.parse(saved) as any[];
     if (Array.isArray(parsed)) {
-      return parsed.filter((id) => DEFAULT_SECTIONS.includes(id));
+      return parsed.filter((id) => id !== 'indicadores' && DEFAULT_SECTIONS.includes(id as InicioSectionId)) as InicioSectionId[];
     }
   } catch (err) {
     console.warn('Erro ao carregar seções ocultas:', err);
@@ -577,18 +570,104 @@ export const InicioView: React.FC<InicioViewProps> = ({
     switch (sectionId) {
       case 'welcome':
         return (
-          <div className="bg-white dark:bg-[#0f172a] rounded-[26px] p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              {/* Data do dia */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
-                <Calendar size={13} className="text-[#fab518]" />
-                <span>{formattedDateCapitalized}</span>
+          <div className="space-y-4">
+            {/* Barra de Saudação e Data */}
+            <div className="bg-white dark:bg-[#0f172a] rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <div className="space-y-1">
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  <span className="capitalize">{formattedDateCapitalized}</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  {greeting}, {currentUser.name}
+                </h2>
+              </div>
+            </div>
+
+            {/* Fita de Indicadores Executivos (Tabular Numerals, Zero AI Slop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* Card 1: Fluxo Ativo */}
+              <div 
+                onClick={() => onNavigate('demandas')}
+                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fluxo em Andamento</p>
+                  <ArrowUpRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
+                  {activeDemands.length}
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 truncate">
+                  {inProduction.length} em produção · {pendingApprovals.length} em aprovação
+                </p>
               </div>
 
-              {/* Saudação dinâmica com horário e nome do usuário */}
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#142142] dark:text-white tracking-tight">
-                {greeting}, <span className="text-[#142142] dark:text-[#fab518]">{currentUser.name}</span>! 👋
-              </h2>
+              {/* Card 2: Entregas para Hoje */}
+              <div 
+                onClick={() => {
+                  setDemandTab('hoje');
+                  const el = document.getElementById('section-container-prioridades');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Entregas de Hoje</p>
+                  {dueTodayDemands.length > 0 ? (
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  ) : (
+                    <Clock size={14} className="text-slate-400" />
+                  )}
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
+                  {dueTodayDemands.length}
+                </div>
+                <p className={`text-[11px] mt-1 truncate font-medium ${
+                  overdueDemands.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {overdueDemands.length > 0 
+                    ? `${overdueDemands.length} com prazo vencido` 
+                    : 'Todas as entregas no prazo'}
+                </p>
+              </div>
+
+              {/* Card 3: Próximos Prazos */}
+              <div 
+                onClick={() => {
+                  setDemandTab('proximas');
+                  const el = document.getElementById('section-container-prioridades');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Próximos Prazos</p>
+                  <Calendar size={14} className="text-slate-400" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
+                  {upcomingDemands.length}
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 truncate">
+                  Entregas programadas na semana
+                </p>
+              </div>
+
+              {/* Card 4: Clientes Ativos */}
+              <div 
+                onClick={() => onNavigate('clientes')}
+                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Carteira de Clientes</p>
+                  <Users size={14} className="text-slate-400" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
+                  {clients.length}
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 truncate">
+                  {activeClients.length} ativas · {clients.length - activeClients.length} em onboarding/outras
+                </p>
+              </div>
             </div>
           </div>
         );
@@ -608,75 +687,6 @@ export const InicioView: React.FC<InicioViewProps> = ({
           />
         );
       }
-
-      case 'indicadores':
-        return (
-          <section aria-label="Resumo Executivo da Agência" className="space-y-4">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#fab518]" />
-                <span>Indicadores Principais do Mês</span>
-              </h3>
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-300 bg-white/90 dark:bg-slate-800/90 px-3 py-1 rounded-full border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
-                Setembro de 2026
-              </span>
-            </div>
-
-            <div className="w-full">
-              {/* Number of New Clients Added This Month */}
-              <div 
-                id="summary-card-new-clients"
-                onClick={() => onNavigate('clientes')}
-                className="bg-white dark:bg-[#0f172a] p-5 sm:p-6 rounded-[26px] border border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-[#fab518] hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col lg:flex-row lg:items-center justify-between gap-5 group"
-              >
-                {/* Lado Esquerdo: Ícone, Título e Métrica Principal */}
-                <div className="flex items-center gap-4">
-                  <div className="w-13 h-13 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform border border-blue-100 dark:border-blue-900/50 shrink-0">
-                    <UserPlus size={24} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">
-                        Novos Clientes no Mês
-                      </span>
-                    </div>
-                    <div className="text-2xl sm:text-3xl font-black text-[#142142] dark:text-white mt-1 tracking-tight flex items-baseline gap-2">
-                      +{newClientsThisMonth}
-                      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                        {newClientsThisMonth === 1 ? 'cliente adicionado' : 'clientes adicionados'} em Setembro
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Centro: Indicadores Rápidos da Carteira */}
-                <div className="flex flex-wrap items-center gap-6 pt-3 lg:pt-0 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800/80 lg:pl-6 text-xs">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Carteira Ativa</p>
-                    <p className="text-sm font-bold text-[#142142] dark:text-slate-200 mt-0.5">
-                      {clients.length} {clients.length === 1 ? 'conta total' : 'contas totais'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Último Cadastrado</p>
-                    <p className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-0.5 truncate max-w-[180px]">
-                      {lastClient ? lastClient.name : 'Nenhum'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Lado Direito: Botão de Ação */}
-                <div className="pt-2 lg:pt-0 shrink-0">
-                  <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 text-xs font-bold text-[#142142] dark:text-white border border-slate-200/80 dark:border-slate-700 group-hover:bg-[#fab518] group-hover:text-[#142142] group-hover:border-[#fab518] transition-all shadow-2xs">
-                    <span>Gerenciar carteira</span>
-                    <ChevronRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        );
 
       case 'aniversariantes':
         return (
@@ -910,79 +920,78 @@ export const InicioView: React.FC<InicioViewProps> = ({
                           <div
                             key={demand.id}
                             onClick={() => onSelectDemand ? onSelectDemand(demand.id) : onNavigate('demandas')}
-                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group ${
+                            className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group relative overflow-hidden ${
                               dueStatus.isOverdue
-                                ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/90 dark:border-rose-900/60 hover:border-rose-400 hover:shadow-xs'
+                                ? 'bg-white dark:bg-[#0f172a] border-rose-200/90 dark:border-rose-900/60 hover:border-rose-400 hover:shadow-xs'
                                 : dueStatus.status === 'hoje'
-                                ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-300/80 dark:border-amber-800/80 hover:border-amber-400 hover:shadow-xs'
-                                : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:bg-white dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-xs'
+                                ? 'bg-white dark:bg-[#0f172a] border-amber-300/80 dark:border-amber-800/80 hover:border-amber-400 hover:shadow-xs'
+                                : 'bg-white dark:bg-[#0f172a] border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs'
                             }`}
                           >
+                            {/* Faixa sutil lateral com a cor da coluna ou alerta */}
+                            <div 
+                              className="absolute left-0 top-0 bottom-0 w-1 transition-colors"
+                              style={{ backgroundColor: dueStatus.isOverdue ? '#e11d48' : (colConfig.color || '#fab518') }}
+                            />
+
                             {/* Lado Esquerdo: Info da Demanda */}
-                            <div className="space-y-1.5 min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span 
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${colConfig.badge}`}
-                                  style={colConfig.isCustom && colConfig.color ? { borderColor: `${colConfig.color}50`, color: colConfig.color } : undefined}
-                                >
+                            <div className="space-y-1 min-w-0 flex-1 pl-1.5">
+                              {/* Metadados limpos com separadores tipográficos (Anti-AI Slop) */}
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
+                                  {demand.client}
+                                </span>
+                                {demand.type && (
+                                  <>
+                                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+                                    <span>{demand.type}</span>
+                                  </>
+                                )}
+                                <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+                                <span style={{ color: colConfig.color }} className="font-medium">
                                   {colConfig.label}
                                 </span>
-
-                                {/* Badge de Horizonte de Prazo */}
-                                {dueStatus.isOverdue ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-600 text-white shadow-2xs">
-                                    <AlertTriangle size={11} className="animate-pulse" />
-                                    <span>ATRASADA</span>
-                                  </span>
-                                ) : dueStatus.status === 'hoje' ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-[#fab518] text-[#142142] shadow-2xs">
-                                    <Clock size={11} className="stroke-[2.5]" />
-                                    <span>DO DIA</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60">
-                                    <Calendar size={11} />
-                                    <span>PRÓXIMA</span>
-                                  </span>
-                                )}
-
-                                {demand.type && (
-                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700">
-                                    {demand.type}
-                                  </span>
-                                )}
                                 {demand.priority === 'urgente' && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-500 text-white shadow-2xs">
-                                    <Flame size={11} />
-                                    <span>URGENTE</span>
-                                  </span>
+                                  <>
+                                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+                                    <span className="text-rose-600 dark:text-rose-400 font-semibold inline-flex items-center gap-0.5">
+                                      <Flame size={12} />
+                                      Urgente
+                                    </span>
+                                  </>
                                 )}
                                 {demand.priority === 'alta' && (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500 text-white">
-                                    ALTA
-                                  </span>
+                                  <>
+                                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+                                    <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                                      Alta
+                                    </span>
+                                  </>
                                 )}
                               </div>
 
                               <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-black text-[#142142] dark:text-white group-hover:text-[#fab518] transition-colors truncate">
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#fab518] transition-colors truncate">
                                   {demand.title}
                                 </h4>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                <span className="flex items-center gap-1 font-semibold text-[#142142] dark:text-slate-200 truncate">
-                                  <Building2 size={13} className="text-slate-400 shrink-0" />
-                                  <span>{demand.client}</span>
-                                </span>
                               </div>
                             </div>
 
                             {/* Lado Direito: Prazo, Responsável & Botão */}
-                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60 dark:border-slate-700/60 shrink-0">
-                              {/* Prazo */}
+                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800 shrink-0">
+                              {/* Prazo com contexto humano legível */}
                               <div className="text-right">
-                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs border ${dueStatus.badgeClass}`}>
+                                <div className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+                                  dueStatus.isOverdue
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : dueStatus.status === 'hoje'
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : dueStatus.status === 'amanha'
+                                    ? 'text-amber-700 dark:text-amber-300'
+                                    : dueStatus.status === 'concluida'
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-slate-600 dark:text-slate-400'
+                                }`}>
                                   {dueStatus.status === 'concluida' ? (
                                     <>
                                       <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400" />
@@ -990,13 +999,18 @@ export const InicioView: React.FC<InicioViewProps> = ({
                                     </>
                                   ) : dueStatus.isOverdue ? (
                                     <>
-                                      <CalendarX2 size={13} className="text-rose-600 dark:text-rose-400 animate-pulse" />
+                                      <CalendarX2 size={13} className="text-rose-600 dark:text-rose-400" />
                                       <span>{dueStatus.label}</span>
                                     </>
                                   ) : dueStatus.status === 'hoje' ? (
                                     <>
                                       <Clock size={13} className="text-amber-600 dark:text-amber-400" />
-                                      <span>{dueStatus.label}</span>
+                                      <span>Vence hoje!</span>
+                                    </>
+                                  ) : dueStatus.status === 'amanha' ? (
+                                    <>
+                                      <Clock size={13} className="text-amber-600 dark:text-amber-400" />
+                                      <span>Vence amanhã</span>
                                     </>
                                   ) : (
                                     <>
@@ -1006,7 +1020,7 @@ export const InicioView: React.FC<InicioViewProps> = ({
                                   )}
                                 </div>
                                 {demand.dueDate && dueStatus.isOverdue && (
-                                  <p className="text-[10px] text-rose-500 font-bold mt-0.5">
+                                  <p className="text-[10px] text-rose-500 font-medium mt-0.5">
                                     Venceu: {formatDemandDateFull(demand.dueDate)}
                                   </p>
                                 )}
@@ -1021,15 +1035,15 @@ export const InicioView: React.FC<InicioViewProps> = ({
                                     className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-2xs"
                                   />
                                 ) : (
-                                  <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold shadow-2xs">
+                                  <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-[#142142] dark:text-[#fab518] border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] font-bold shadow-2xs">
                                     {clientInfo.initial}
                                   </div>
                                 )}
                               </div>
 
                               {/* Botão de abrir detalhes */}
-                              <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 group-hover:bg-[#fab518] group-hover:text-[#142142] text-slate-400 flex items-center justify-center transition-colors border border-slate-200/80 dark:border-slate-700 shrink-0">
-                                <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+                              <div className="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:text-[#142142] dark:group-hover:text-white flex items-center justify-center transition-colors shrink-0">
+                                <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
                               </div>
                             </div>
                           </div>
@@ -1101,12 +1115,12 @@ export const InicioView: React.FC<InicioViewProps> = ({
                 {/* Gráfico de Status */}
                 <DemandsStatusDoughnutChart demands={demands} columns={activeColumns} onNavigate={onNavigate} />
 
-                {/* Acesso Rápido */}
+                {/* Acesso Rápido Operacional */}
                 <div className="bg-white dark:bg-[#0f172a] rounded-[26px] border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
-                    <h3 className="text-sm font-black text-[#142142] dark:text-white tracking-tight flex items-center gap-2">
-                      <Sparkles size={15} className="text-[#fab518]" />
-                      <span>Acesso Rápido</span>
+                    <h3 className="text-sm font-bold text-[#142142] dark:text-white tracking-tight flex items-center gap-2">
+                      <Compass size={16} className="text-[#fab518]" />
+                      <span>Atalhos da Operação</span>
                     </h3>
                   </div>
 
@@ -1114,77 +1128,69 @@ export const InicioView: React.FC<InicioViewProps> = ({
                     <button
                       type="button"
                       onClick={onOpenNewDemandModal}
-                      className="w-full text-left p-2.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 hover:bg-amber-100/70 dark:hover:bg-amber-950/40 transition-colors border border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between cursor-pointer group"
+                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-[#fab518] text-[#142142] flex items-center justify-center font-bold shrink-0 shadow-2xs">
-                          <Plus size={16} />
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold shrink-0">
+                          <Plus size={16} className="stroke-[2.5]" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#142142] dark:text-white truncate">Criar Nova Demanda</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Post, Carrossel ou Campanha</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Nova Demanda</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Criar post, carrossel ou campanha</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800 shrink-0">
-                        Atalho
-                      </span>
+                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onNavigate('calendario')}
-                      className="w-full text-left p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
+                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shrink-0">
                           <Calendar size={15} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#142142] dark:text-white truncate">Datas Comemorativas</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Feriados e ideias de posts</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Calendário Editorial</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Feriados, datas e ideias de posts</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shrink-0">
-                        2026
-                      </span>
+                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onNavigate('orcamentos')}
-                      className="w-full text-left p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
+                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
                           <FileSpreadsheet size={15} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#142142] dark:text-white truncate">Novo Orçamento</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Proposta comercial</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Propostas & Orçamentos</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Comercial, precificação e faturas</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0">
-                        Comercial
-                      </span>
+                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onNavigate('clientes')}
-                      className="w-full text-left p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
+                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
                           <UserPlus size={15} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#142142] dark:text-white truncate">Cadastrar Cliente</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Contatos e acessos</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Cadastrar Cliente</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Adicionar nova conta ao CRM</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
-                        Base
-                      </span>
+                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
                     </button>
                   </div>
                 </div>

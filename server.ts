@@ -5,11 +5,26 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
 import { isValidCnpj } from "./src/utils/cnpjValidator";
+import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
 const CONFIG_FILE = path.join(process.cwd(), "supabase-config.json");
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "database.json");
 const CHAT_FILE = path.join(DATA_DIR, "chat-messages.json");
+const FIREBASE_CONFIG_FILE = path.join(process.cwd(), "firebase-applet-config.json");
+
+let firestoreDb: any = null;
+if (fs.existsSync(FIREBASE_CONFIG_FILE)) {
+  try {
+    const fbConfig = JSON.parse(fs.readFileSync(FIREBASE_CONFIG_FILE, "utf-8"));
+    const fbApp = !getFirebaseApps().length ? initFirebaseApp(fbConfig) : getFirebaseApp();
+    firestoreDb = getFirestore(fbApp, fbConfig.firestoreDatabaseId);
+    console.log("[Firestore Server] Conectado com sucesso:", fbConfig.firestoreDatabaseId);
+  } catch (err) {
+    console.warn("[Firestore Server] Aviso ao conectar com Firestore:", err);
+  }
+}
 
 // Garante que o diretório de dados exista
 if (!fs.existsSync(DATA_DIR)) {
@@ -116,8 +131,31 @@ async function startServer() {
     }
   });
 
-  // Central Database (compartilha clientes, demandas e finanças entre todos os computadores)
-  app.get("/api/database", (_req, res) => {
+  // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Firestore + Cache)
+  app.get("/api/database", async (_req, res) => {
+    // 1. Tenta carregar do Firestore primeiro (banco de dados em nuvem permanente)
+    if (firestoreDb) {
+      try {
+        const docRef = doc(firestoreDb, "agency_data", "main_state");
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const cloudData = snap.data();
+          // Atualiza cache local no disco
+          try {
+            fs.writeFileSync(DB_FILE, JSON.stringify(cloudData, null, 2), "utf-8");
+          } catch {}
+          return res.json({
+            success: true,
+            data: cloudData,
+            timestamp: Date.now(),
+          });
+        }
+      } catch (err) {
+        console.warn("[Firestore Server] Aviso ao consultar Firestore:", err);
+      }
+    }
+
+    // 2. Fallback de alta disponibilidade: lê cache local do arquivo
     try {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, "utf-8");
@@ -139,7 +177,7 @@ async function startServer() {
     });
   });
 
-  app.post("/api/database", (req, res) => {
+  app.post("/api/database", async (req, res) => {
     try {
       const body = req.body;
       if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -173,7 +211,7 @@ async function startServer() {
 
       const sanitizedUpdate: Record<string, any> = {};
       for (const key of Object.keys(body)) {
-        if (ALLOWED_COLLECTIONS.includes(key)) {
+        if (ALLOWED_COLLECTIONS.includes(key) && body[key] !== undefined && body[key] !== null) {
           sanitizedUpdate[key] = body[key];
         }
       }
@@ -184,7 +222,19 @@ async function startServer() {
         updatedAt: Date.now(),
       };
 
+      // 1. Grava no cache de arquivo local
       fs.writeFileSync(DB_FILE, JSON.stringify(merged, null, 2), "utf-8");
+
+      // 2. Grava de forma permanente no Google Cloud Firestore
+      if (firestoreDb) {
+        try {
+          const docRef = doc(firestoreDb, "agency_data", "main_state");
+          await setDoc(docRef, merged, { merge: true });
+        } catch (fErr) {
+          console.warn("[Firestore Server] Aviso ao persistir no Firestore:", fErr);
+        }
+      }
+
       res.json({ success: true, timestamp: Date.now() });
     } catch (e: any) {
       console.error("Erro ao salvar data/database.json:", e);

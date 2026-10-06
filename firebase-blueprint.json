@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "AgencyState": {
+      "title": "AgencyState",
+      "description": "Estado consolidado do sistema da agência (clientes, demandas, serviços, propostas e financeiro)",
+      "type": "object",
+      "properties": {
+        "clients": {
+          "type": "array",
+          "description": "Lista de clientes cadastrados na agência"
+        },
+        "demands": {
+          "type": "array",
+          "description": "Lista de demandas e tarefas operacionais"
+        },
+        "services": {
+          "type": "array",
+          "description": "Catálogo de serviços oferecidos"
+        },
+        "proposals": {
+          "type": "array",
+          "description": "Orçamentos e propostas comerciais"
+        },
+        "invoices": {
+          "type": "array",
+          "description": "Faturas e lançamentos financeiros"
+        },
+        "activities": {
+          "type": "array",
+          "description": "Histórico de atividades recentes"
+        },
+        "teamMembers": {
+          "type": "array",
+          "description": "Membros e colaboradores da equipe"
+        },
+        "kanbanColumns": {
+          "type": "array",
+          "description": "Colunas configuradas do fluxo operacional Kanban"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp unix da última atualização"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/agency_data/{docId}": {
+      "schema": "AgencyState",
+      "description": "Documentos centrais de persistência dos dados compartilhados da agência"
+    }
+  }
+}

@@ -10,8 +10,7 @@ import {
   User,
   ArrowLeft,
   Check,
-  MessageCircle,
-  Sparkles
+  MessageCircle
 } from 'lucide-react';
 import { 
   checkBruteForceStatus, 
@@ -425,31 +424,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <h1 className="text-[30px] sm:text-[32px] font-black text-slate-900 tracking-tight leading-tight">
                   Entrar
                 </h1>
-                {!isAgency && (
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#142142] text-[#fab518] border border-[#fab518]/30 shadow-2xs">
-                    Portal do Cliente
-                  </span>
-                )}
               </div>
               <p className="text-sm text-slate-500 font-normal leading-normal transition-all">
                 {isAgency 
                   ? 'Acesse o painel completo da sua agência' 
-                  : 'Acesso exclusivo para acompanhamento de demandas e aprovação de materiais'}
+                  : 'Acesse o painel do cliente'}
               </p>
             </div>
 
             {/* Dotted horizontal divider line matching image.png */}
             <div className="border-b border-dotted border-slate-200 my-4" />
-
-            {/* Dedicated Client Access Banner */}
-            {!isAgency && (
-              <div className="mb-4 p-3 bg-amber-50/80 rounded-2xl border border-amber-200/90 text-amber-950 text-xs flex items-start gap-2.5 shadow-2xs">
-                <Sparkles size={16} className="text-[#f99616] shrink-0 mt-0.5" />
-                <p className="leading-relaxed text-[11px] text-amber-900">
-                  <strong className="text-amber-950">Ambiente Seguro do Cliente:</strong> Seu acesso é dedicado exclusivamente ao seu <strong>Portal do Cliente</strong> e à <strong>Central de Aprovações</strong>.
-                </p>
-              </div>
-            )}
 
             {/* Security Alerts if locked */}
             {lockStatus.isLocked ? (

@@ -62,7 +62,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.role === 'cliente') {
-          return 'aprovacoes';
+          return 'portal-cliente';
         }
       }
     } catch {}
@@ -79,17 +79,20 @@ export function Layout({ children, onLogout }: LayoutProps) {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Limpeza e inicialização oficial para o lançamento limpo do sistema
+  // Limpeza completa e inicialização oficial para o lançamento limpo do sistema
   try {
-    const launchCleanKey = 'agency_system_official_launch_v1';
+    const launchCleanKey = 'agency_system_official_launch_v4_clean_all_system_data';
     if (!localStorage.getItem(launchCleanKey)) {
       localStorage.setItem(launchCleanKey, 'true');
       localStorage.setItem('agency_clients', JSON.stringify([]));
       localStorage.setItem('agency_demands', JSON.stringify([]));
       localStorage.setItem('agency_demands_v2', JSON.stringify([]));
-      localStorage.setItem('agency_invoices', JSON.stringify([]));
+      localStorage.setItem('agency_services', JSON.stringify([]));
       localStorage.setItem('agency_proposals', JSON.stringify([]));
-      localStorage.setItem('agency_team_members', JSON.stringify(initialTeamMembers));
+      localStorage.setItem('agency_invoices', JSON.stringify([]));
+      localStorage.setItem('agency_suppliers', JSON.stringify([]));
+      localStorage.setItem('agency_activities', JSON.stringify([]));
+      localStorage.setItem('agency_recent_activities', JSON.stringify([]));
     }
   } catch {}
 
@@ -280,11 +283,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
   });
   const [kanbanFilterTrigger, setKanbanFilterTrigger] = useState<number>(0);
 
-  // Trava clientes exclusivamente no Portal do Cliente (demandas) e na Central de Aprovações
+  // Trava clientes exclusivamente no Portal do Cliente e na Central de Aprovações
   useEffect(() => {
     if (effectiveUser.role === 'cliente') {
-      if (currentPage !== 'demandas' && currentPage !== 'aprovacoes') {
-        setCurrentPage('aprovacoes');
+      if (currentPage !== 'portal-cliente' && currentPage !== 'aprovacoes' && currentPage !== 'demandas') {
+        setCurrentPage('portal-cliente');
       }
       const clientName = effectiveUser.clientName || effectiveUser.name;
       if (clientName && selectedClientForKanban !== clientName) {
@@ -346,6 +349,45 @@ export function Layout({ children, onLogout }: LayoutProps) {
     } catch {}
   };
 
+  const removeDeletedDemandId = (id: string) => {
+    try {
+      const set = getDeletedDemandIds();
+      if (set.has(id)) {
+        set.delete(id);
+        localStorage.setItem('agency_deleted_demand_ids', JSON.stringify(Array.from(set)));
+      }
+    } catch {}
+  };
+
+  const getDeletedClientIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('agency_deleted_client_ids');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Set(parsed);
+      }
+    } catch {}
+    return new Set();
+  };
+
+  const addDeletedClientId = (id: string) => {
+    try {
+      const set = getDeletedClientIds();
+      set.add(id);
+      localStorage.setItem('agency_deleted_client_ids', JSON.stringify(Array.from(set)));
+    } catch {}
+  };
+
+  const removeDeletedClientId = (id: string) => {
+    try {
+      const set = getDeletedClientIds();
+      if (set.has(id)) {
+        set.delete(id);
+        localStorage.setItem('agency_deleted_client_ids', JSON.stringify(Array.from(set)));
+      }
+    } catch {}
+  };
+
   const getDeletedTeamMemberIds = (): Set<string> => {
     try {
       const raw = localStorage.getItem('agency_deleted_team_member_ids');
@@ -399,14 +441,25 @@ export function Layout({ children, onLogout }: LayoutProps) {
         supabaseService.fetchKanbanColumns(),
       ]);
 
-      // Se o Supabase tiver clientes cadastrados na nuvem, atualiza imediatamente a visualização
+      // Se o Supabase tiver clientes cadastrados na nuvem, atualiza de forma não destrutiva
       if (remoteClients && Array.isArray(remoteClients) && remoteClients.length > 0) {
-        const sanitizedClients = remoteClients.map(c => c.id === 'client-piloto-3405' ? { ...c, monthlyFee: 0 } : c);
-        setClients(sanitizedClients);
-        try {
-          localStorage.setItem('agency_clients', JSON.stringify(sanitizedClients));
-        } catch {}
-        serverDbService.saveDatabase({ clients: sanitizedClients });
+        const deletedClientIds = getDeletedClientIds();
+        const sanitizedRemote = remoteClients
+          .filter(c => !deletedClientIds.has(c.id))
+          .map(c => c.id === 'client-piloto-3405' ? { ...c, monthlyFee: 0 } : c);
+
+        setClients((prevLocal) => {
+          const cleanLocal = prevLocal.filter(c => !deletedClientIds.has(c.id));
+          const remoteMap = new Map(sanitizedRemote.map(c => [c.id, c]));
+          const localPending = cleanLocal.filter(c => !remoteMap.has(c.id));
+          const merged = [...sanitizedRemote, ...localPending];
+
+          try {
+            localStorage.setItem('agency_clients', JSON.stringify(merged));
+          } catch {}
+          serverDbService.saveDatabase({ clients: merged });
+          return merged;
+        });
       }
 
       // Se o Supabase tiver demandas gravadas
@@ -575,41 +628,101 @@ export function Layout({ children, onLogout }: LayoutProps) {
         const remoteData = await serverDbService.fetchDatabase();
         if (!isMounted || !remoteData) return;
 
+        // Sincronização segura de CLIENTES (sem sobrescrita destrutiva)
         if (remoteData.clients && Array.isArray(remoteData.clients)) {
+          const deletedClientIds = getDeletedClientIds();
+          const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
+
           setClients((prev) => {
+            const cleanPrev = prev.filter((c) => !deletedClientIds.has(c.id));
+            const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
+            const localPending = cleanPrev.filter((c) => !remoteMap.has(c.id));
+            const merged = [...cleanRemote, ...localPending];
+
+            // Se existiam clientes cadastrados localmente que o servidor ainda não tem, envia para garantir persistência
+            if (localPending.length > 0) {
+              serverDbService.saveDatabase({ clients: merged });
+            }
+
             if (
-              prev.length === remoteData.clients!.length &&
-              prev.every((p, idx) => p.id === remoteData.clients![idx]?.id && p.name === remoteData.clients![idx]?.name)
+              cleanPrev.length === merged.length &&
+              cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.name === merged[idx]?.name && p.monthlyFee === merged[idx]?.monthlyFee)
             ) {
               return prev;
             }
+
             try {
-              localStorage.setItem('agency_clients', JSON.stringify(remoteData.clients));
+              localStorage.setItem('agency_clients', JSON.stringify(merged));
             } catch {}
-            return remoteData.clients!;
+            return merged;
           });
         }
 
+        // Sincronização segura de DEMANDAS (sem sobrescrita destrutiva)
         if (remoteData.demands && Array.isArray(remoteData.demands)) {
-          const deletedIds = getDeletedDemandIds();
-          const cleanRemote = remoteData.demands.filter((d) => !deletedIds.has(d.id));
-          const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 4000);
+          const deletedDemandIds = getDeletedDemandIds();
+          const cleanRemote = remoteData.demands.filter((d) => !deletedDemandIds.has(d.id));
 
-          if (!isRecentlyEditedLocally) {
-            setDemands((prev) => {
-              const cleanPrev = prev.filter((d) => !deletedIds.has(d.id));
-              if (
-                cleanPrev.length === cleanRemote.length &&
-                cleanPrev.every((p, idx) => p.id === cleanRemote[idx]?.id && p.columnId === cleanRemote[idx]?.columnId)
-              ) {
-                return cleanPrev;
-              }
-              try {
-                localStorage.setItem('agency_demands', JSON.stringify(cleanRemote));
-              } catch {}
-              return cleanRemote;
+          setDemands((prev) => {
+            const cleanPrev = prev.filter((d) => !deletedDemandIds.has(d.id));
+            const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
+            const localPending = cleanPrev.filter((d) => !remoteMap.has(d.id));
+
+            // Preserva alterações locais recentes feitas há menos de 15 segundos
+            const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 15000);
+            const merged = cleanRemote.map((rem) => {
+              const loc = cleanPrev.find((p) => p.id === rem.id);
+              if (!loc) return rem;
+              if (isRecentlyEditedLocally) return loc;
+              return { ...rem, ...loc, columnId: rem.columnId || loc.columnId };
             });
-          }
+
+            // Adiciona as demandas cadastradas localmente pendentes de sincronização
+            localPending.forEach((loc) => {
+              if (!merged.some((m) => m.id === loc.id)) {
+                merged.push(loc);
+              }
+            });
+
+            if (localPending.length > 0) {
+              serverDbService.saveDatabase({ demands: merged });
+            }
+
+            if (
+              cleanPrev.length === merged.length &&
+              cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.columnId === merged[idx]?.columnId && p.title === merged[idx]?.title)
+            ) {
+              return prev;
+            }
+
+            try {
+              localStorage.setItem('agency_demands', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+
+        if (remoteData.services && Array.isArray(remoteData.services)) {
+          setServices(remoteData.services);
+          try {
+            localStorage.setItem('agency_services', JSON.stringify(remoteData.services));
+          } catch {}
+        }
+
+        if (remoteData.proposals && Array.isArray(remoteData.proposals)) {
+          setProposals(remoteData.proposals);
+          try {
+            localStorage.setItem('agency_proposals', JSON.stringify(remoteData.proposals));
+          } catch {}
+        }
+
+        if (remoteData.invoices && Array.isArray(remoteData.invoices)) {
+          const mockInvoiceIds = new Set(['FAT-2026-001', 'FAT-2026-002', 'FAT-2026-003', 'FAT-2026-004']);
+          const cleanRemote = remoteData.invoices.filter((inv: any) => inv && inv.id && !mockInvoiceIds.has(inv.id)).map(normalizeInvoice);
+          setInvoices(cleanRemote);
+          try {
+            localStorage.setItem('agency_invoices', JSON.stringify(cleanRemote));
+          } catch {}
         }
 
         if (remoteData.kanbanColumns && Array.isArray(remoteData.kanbanColumns) && remoteData.kanbanColumns.length > 0) {
@@ -734,56 +847,50 @@ export function Layout({ children, onLogout }: LayoutProps) {
         const pushPayload: any = {};
 
         if (remoteData) {
-          // 1. CLIENTES (Mescla e aplica dados reais)
+          // 1. CLIENTES (Mescla inteligente: mantém clientes locais pendentes sem perda de dados)
+          const deletedClientIds = getDeletedClientIds();
+          const cleanLocalClients = localClients.filter((c) => !deletedClientIds.has(c.id));
           if (remoteData.clients && Array.isArray(remoteData.clients)) {
-            const remoteMap = new Map(remoteData.clients.map((c) => [c.id, c]));
-            const mergedClients = [...remoteData.clients];
-            let hasNewLocal = false;
+            const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
+            const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
+            const localPending = cleanLocalClients.filter((c) => !remoteMap.has(c.id));
+            const merged = [...cleanRemote, ...localPending];
 
-            if (localClients.length > 0 && remoteData.clients.length > 0) {
-              for (const loc of localClients) {
-                if (!remoteMap.has(loc.id)) {
-                  mergedClients.push(loc);
-                  hasNewLocal = true;
-                }
-              }
-            }
-
-            setClients(mergedClients);
+            setClients(merged);
             try {
-              localStorage.setItem('agency_clients', JSON.stringify(mergedClients));
+              localStorage.setItem('agency_clients', JSON.stringify(merged));
             } catch {}
-
-            if (hasNewLocal) {
+            if (localPending.length > 0) {
               needsServerPush = true;
-              pushPayload.clients = mergedClients;
+              pushPayload.clients = merged;
             }
+          } else if (cleanLocalClients.length > 0) {
+            setClients(cleanLocalClients);
+            needsServerPush = true;
+            pushPayload.clients = cleanLocalClients;
           }
 
-          // 2. DEMANDAS (Mescla e aplica dados reais)
+          // 2. DEMANDAS (Mescla inteligente: mantém demandas locais pendentes sem perda de dados)
+          const deletedDemandIds = getDeletedDemandIds();
+          const cleanLocalDemands = localDemands.filter((d) => !deletedDemandIds.has(d.id));
           if (remoteData.demands && Array.isArray(remoteData.demands)) {
-            const remoteDemandMap = new Map(remoteData.demands.map((d) => [d.id, d]));
-            const mergedDemands = [...remoteData.demands];
-            let hasNewLocalDemand = false;
+            const cleanRemote = remoteData.demands.filter((d) => !deletedDemandIds.has(d.id));
+            const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
+            const localPending = cleanLocalDemands.filter((d) => !remoteMap.has(d.id));
+            const merged = [...cleanRemote, ...localPending];
 
-            if (localDemands.length > 0 && remoteData.demands.length > 0) {
-              for (const loc of localDemands) {
-                if (!remoteDemandMap.has(loc.id)) {
-                  mergedDemands.push(loc);
-                  hasNewLocalDemand = true;
-                }
-              }
-            }
-
-            setDemands(mergedDemands);
+            setDemands(merged);
             try {
-              localStorage.setItem('agency_demands', JSON.stringify(mergedDemands));
+              localStorage.setItem('agency_demands', JSON.stringify(merged));
             } catch {}
-
-            if (hasNewLocalDemand) {
+            if (localPending.length > 0) {
               needsServerPush = true;
-              pushPayload.demands = mergedDemands;
+              pushPayload.demands = merged;
             }
+          } else if (cleanLocalDemands.length > 0) {
+            setDemands(cleanLocalDemands);
+            needsServerPush = true;
+            pushPayload.demands = cleanLocalDemands;
           }
 
           // 3. EQUIPE (TEAM MEMBERS)
@@ -839,7 +946,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           }
 
           // 5. ORÇAMENTOS (PROPOSALS)
-          if (remoteData.proposals && Array.isArray(remoteData.proposals) && remoteData.proposals.length > 0) {
+          if (remoteData.proposals && Array.isArray(remoteData.proposals)) {
             setProposals(remoteData.proposals);
             try {
               localStorage.setItem('agency_proposals', JSON.stringify(remoteData.proposals));
@@ -851,7 +958,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           }
 
           // 6. SERVIÇOS
-          if (remoteData.services && Array.isArray(remoteData.services) && remoteData.services.length > 0) {
+          if (remoteData.services && Array.isArray(remoteData.services)) {
             setServices(remoteData.services);
             try {
               localStorage.setItem('agency_services', JSON.stringify(remoteData.services));
@@ -1361,13 +1468,38 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const handleAddDemand = (newDemand: DemandItem) => {
+    removeDeletedDemandId(newDemand.id);
+    lastLocalDemandUpdateRef.current = Date.now();
+
+    let updatedDemands: DemandItem[] = [];
     setDemands((prev) => {
-      const updated = [newDemand, ...prev];
+      const updated = [newDemand, ...prev.filter((d) => d.id !== newDemand.id)];
+      updatedDemands = updated;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ demands: updated }, true);
       return updated;
+    });
+
+    const demandsToSave = updatedDemands.length > 0 ? updatedDemands : [newDemand, ...demands];
+
+    // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
+    setClients((prevClients) => {
+      const updatedClients = prevClients.map((c) => {
+        const matchesClient = (newDemand.clientId && c.id === newDemand.clientId) ||
+          c.name.trim().toLowerCase() === (newDemand.client || '').trim().toLowerCase() ||
+          (c.companyName && c.companyName.trim().toLowerCase() === (newDemand.client || '').trim().toLowerCase());
+
+        if (matchesClient && newDemand.columnId !== 'concluidas') {
+          return { ...c, activeDemandsCount: (c.activeDemandsCount || 0) + 1 };
+        }
+        return c;
+      });
+      try {
+        localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
+      } catch {}
+      serverDbService.saveDatabase({ demands: demandsToSave, clients: updatedClients }, true);
+      return updatedClients;
     });
 
     // Sincroniza em background com o Supabase PostgreSQL
@@ -1436,29 +1568,30 @@ export function Layout({ children, onLogout }: LayoutProps) {
         : {}),
     };
 
+    let updatedDemandsList: DemandItem[] = [];
     setDemands((prev) => {
       const updated = prev.map((item) => (item.id === finalDemand.id ? finalDemand : item));
+      updatedDemandsList = updated;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ demands: updated }, true);
       return updated;
     });
 
-    // Atualiza contagem de demandas ativas nos clientes
+    const demandsToPersist = updatedDemandsList.length > 0 ? updatedDemandsList : demands.map((item) => (item.id === finalDemand.id ? finalDemand : item));
+
+    // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
       const updatedClients = prevClients.map((c) => {
-        const count = demands.filter(d => {
-          const isThisDemand = d.id === finalDemand.id;
-          const target = isThisDemand ? finalDemand : d;
-          return (target.clientId === c.id || target.client.toLowerCase() === c.name.toLowerCase()) && target.columnId !== 'concluidas';
+        const count = demandsToPersist.filter(d => {
+          return (d.clientId === c.id || d.client.toLowerCase() === c.name.toLowerCase()) && d.columnId !== 'concluidas';
         }).length;
         return { ...c, activeDemandsCount: count };
       });
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients });
+      serverDbService.saveDatabase({ demands: demandsToPersist, clients: updatedClients }, true);
       return updatedClients;
     });
 
@@ -1739,14 +1872,18 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const handleAddClient = (newClient: Client) => {
+    removeDeletedClientId(newClient.id);
+    let updatedClients: Client[] = [];
     setClients((prev) => {
-      const updated = [newClient, ...prev];
+      const updated = [newClient, ...prev.filter((c) => c.id !== newClient.id)];
+      updatedClients = updated;
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ clients: updated }, true);
       return updated;
     });
+    const clientsToSave = updatedClients.length > 0 ? updatedClients : [newClient, ...clients];
+    serverDbService.saveDatabase({ clients: clientsToSave }, true);
     supabaseService.upsertClient(newClient);
   };
 
@@ -1836,6 +1973,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const handleDeleteClient = (clientId: string) => {
+    addDeletedClientId(clientId);
     setClients((prev) => {
       const updated = prev.filter((c) => c.id !== clientId);
       try {
@@ -1848,6 +1986,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const handleDeleteMultipleClients = (clientIds: string[]) => {
+    clientIds.forEach((id) => addDeletedClientId(id));
     setClients((prev) => {
       const updated = prev.filter((c) => !clientIds.includes(c.id));
       try {
@@ -2134,11 +2273,13 @@ export function Layout({ children, onLogout }: LayoutProps) {
                   inicio: false,
                   demandas: true,
                   calendario: false,
+                  aprovacoes: true,
+                  'portal-cliente': true,
                 },
               };
               setCurrentUserProfile(clientUser);
               setSelectedClientForKanban(client.name);
-              setCurrentPage('demandas');
+              setCurrentPage('portal-cliente');
               try {
                 localStorage.setItem('help_agency_user', JSON.stringify(clientUser));
               } catch {}
@@ -2239,28 +2380,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
             }}
           />
         );
-      case 'portal-cliente':
-        return (
-          <ClientApprovalsView
-            demands={demands}
-            clients={clients}
-            currentUser={effectiveUser}
-            onClientApprovalAction={handleClientApprovalAction}
-            onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}
-            onNavigateToPortal={() => setCurrentPage('demandas')}
-            onOpenWhatsAppNotification={(demand) => setWhatsAppDemand(demand)}
-            onUpdateClient={handleUpdateClient}
-            onOpenDemandModal={(demand) => {
-              setSelectedDemandIdForKanban(demand.id);
-              setCurrentPage('demandas');
-            }}
-            onSelectClientDemands={(clientName) => {
-              setSelectedClientForKanban(clientName);
-              setKanbanFilterTrigger((prev) => prev + 1);
-              setCurrentPage('demandas');
-            }}
-          />
-        );
       case 'apis':
         return (
           <ApisView
@@ -2307,30 +2426,41 @@ export function Layout({ children, onLogout }: LayoutProps) {
             }}
           />
         );
+      case 'portal-cliente':
+        return (
+          <PortalClienteView
+            demands={demands}
+            clients={clients}
+            invoices={invoices}
+            currentUser={effectiveUser}
+            onClientApprovalAction={handleClientApprovalAction}
+            onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}
+            onNavigateToApprovals={() => setCurrentPage('aprovacoes')}
+            onOpenWhatsAppNotification={(demand) => setWhatsAppDemand(demand)}
+            onOpenDemandModal={(demand) => {
+              setSelectedDemandIdForKanban(demand.id);
+              setCurrentPage('demandas');
+            }}
+            onUpdateClient={handleUpdateClient}
+          />
+        );
       default:
         if (effectiveUser.role === 'cliente') {
           return (
-            <DemandasView
+            <PortalClienteView
               demands={demands}
               clients={clients}
-              teamMembers={teamMembers}
-              columns={kanbanColumns}
+              invoices={invoices}
               currentUser={effectiveUser}
-              onAddColumn={handleAddColumn}
-              onUpdateColumn={handleUpdateColumn}
-              onDeleteColumn={handleDeleteColumn}
-              initialClientFilter={selectedClientForKanban}
-              filterResetTrigger={kanbanFilterTrigger}
-              initialSelectedDemandId={selectedDemandIdForKanban}
-              onClearInitialSelectedDemand={() => setSelectedDemandIdForKanban(null)}
-              onUpdateDemandColumn={handleUpdateDemandColumn}
-              onMoveDemand={handleMoveDemand}
-              onOpenNewDemandModal={() => setIsNewDemandModalOpen(true)}
-              onSaveDemand={handleSaveDemand}
-              onDeleteDemand={handleDeleteDemand}
-              onOpenWhatsAppNotification={(demand) => setWhatsAppDemand(demand)}
+              onClientApprovalAction={handleClientApprovalAction}
               onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}
               onNavigateToApprovals={() => setCurrentPage('aprovacoes')}
+              onOpenWhatsAppNotification={(demand) => setWhatsAppDemand(demand)}
+              onOpenDemandModal={(demand) => {
+                setSelectedDemandIdForKanban(demand.id);
+                setCurrentPage('demandas');
+              }}
+              onUpdateClient={handleUpdateClient}
             />
           );
         }
@@ -2425,7 +2555,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           {children || (
             <AnimatePresence mode="wait">
               <motion.div
-                key={currentPage}
+                key={`page-view-${currentPage}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
@@ -2472,8 +2602,8 @@ export function Layout({ children, onLogout }: LayoutProps) {
         }}
         onNotificationSent={(demandId) => {
           const sentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          setDemands((prev) =>
-            prev.map((d) =>
+          setDemands((prev) => {
+            const updated = prev.map((d) =>
               d.id === demandId
                 ? {
                     ...d,
@@ -2481,13 +2611,23 @@ export function Layout({ children, onLogout }: LayoutProps) {
                     approvalSentAt: sentTime,
                   }
                 : d
-            )
-          );
+            );
+            try {
+              localStorage.setItem('agency_demands', JSON.stringify(updated));
+            } catch {}
+            serverDbService.saveDatabase({ demands: updated }, true);
+            return updated;
+          });
         }}
         onUpdateClientPhone={(clientId, newPhone) => {
-          setClients((prev) =>
-            prev.map((c) => (c.id === clientId ? { ...c, phone: newPhone } : c))
-          );
+          setClients((prev) => {
+            const updated = prev.map((c) => (c.id === clientId ? { ...c, phone: newPhone } : c));
+            try {
+              localStorage.setItem('agency_clients', JSON.stringify(updated));
+            } catch {}
+            serverDbService.saveDatabase({ clients: updated }, true);
+            return updated;
+          });
         }}
       />
 
@@ -2651,10 +2791,14 @@ export default function App() {
             localStorage.setItem('agency_clients', JSON.stringify(remoteData.clients));
           } catch {}
         }
-        if (remoteData.demands && Array.isArray(remoteData.demands)) {
+        if (remoteData.demands && Array.isArray(remoteData.demands) && remoteData.demands.length > 0) {
           setPortalDemands(remoteData.demands);
           try {
-            localStorage.setItem('agency_demands', JSON.stringify(remoteData.demands));
+            const rawLocal = localStorage.getItem('agency_demands');
+            const localCount = rawLocal ? JSON.parse(rawLocal)?.length || 0 : 0;
+            if (remoteData.demands.length >= localCount) {
+              localStorage.setItem('agency_demands', JSON.stringify(remoteData.demands));
+            }
           } catch {}
         }
       } catch (err) {

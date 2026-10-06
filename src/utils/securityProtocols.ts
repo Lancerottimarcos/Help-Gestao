@@ -1250,6 +1250,7 @@ export async function validateMasterCredentials(
             demandas: true,
             calendario: false,
             aprovacoes: true,
+            'portal-cliente': true,
           },
         } : undefined
       };

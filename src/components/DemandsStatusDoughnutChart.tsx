@@ -281,11 +281,11 @@ export const DemandsStatusDoughnutChart: React.FC<DemandsStatusDoughnutChartProp
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-black text-[#142142] dark:text-white text-xs">
+                <div className="flex items-center gap-2 shrink-0 tabular-nums">
+                  <span className="font-bold text-[#142142] dark:text-white text-xs">
                     {item.value}
                   </span>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${item.bgBadge} ${item.textBadge}`}>
+                  <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 w-8 text-right">
                     {item.percent}%
                   </span>
                 </div>

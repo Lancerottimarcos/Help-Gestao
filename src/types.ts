@@ -30,6 +30,7 @@ export interface MemberPermissions {
   calendario?: boolean;
   agenda?: boolean;
   aprovacoes?: boolean;
+  'portal-cliente'?: boolean;
 }
 
 export interface UserProfile {
@@ -333,7 +334,6 @@ export interface ApprovalNotificationConfig {
 export type InicioSectionId = 
   | 'welcome' 
   | 'demandas_stories'
-  | 'indicadores' 
   | 'prioridades'
   | 'aniversariantes' 
   | 'mapa';
