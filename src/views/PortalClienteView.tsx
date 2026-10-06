@@ -3,7 +3,8 @@ import {
   DemandItem, 
   Client, 
   UserProfile, 
-  Invoice 
+  Invoice,
+  KanbanColumn
 } from '../types';
 import { 
   User, 
@@ -39,13 +40,18 @@ import {
   Download,
   ArrowRight,
   TrendingUp,
-  ThumbsUp
+  ThumbsUp,
+  Search,
+  Filter,
+  Maximize2,
+  ZoomIn
 } from 'lucide-react';
 
 export interface PortalClienteViewProps {
   demands: DemandItem[];
   clients: Client[];
   invoices?: Invoice[];
+  columns?: KanbanColumn[];
   currentUser?: UserProfile;
   onClientApprovalAction: (
     demandId: string, 
@@ -62,6 +68,52 @@ export interface PortalClienteViewProps {
 }
 
 type PortalTab = 'visao_geral' | 'conteudo' | 'metricas' | 'financeiro' | 'arquivos';
+
+export const isAprovacaoClienteColumn = (columnId?: string, columns?: KanbanColumn[]): boolean => {
+  if (!columnId) return false;
+  const colLower = columnId.toLowerCase().trim();
+
+  // 1. Verificação por identificadores padrão da coluna Aprovação Cliente
+  if (
+    colLower === 'aprovacao' ||
+    colLower === 'aprovacao-cliente' ||
+    colLower === 'aprovacao_cliente' ||
+    colLower === 'aprovacaocliente' ||
+    colLower === 'aprovacao cliente' ||
+    colLower === 'em aprovacao' ||
+    colLower === 'em aprovação' ||
+    colLower.includes('aprov')
+  ) {
+    return true;
+  }
+
+  // 2. Verificação pelas colunas passadas (Kanban)
+  if (columns && columns.length > 0) {
+    const matchedCol = columns.find(c => c.id.toLowerCase().trim() === colLower);
+    if (matchedCol) {
+      const titleLower = (matchedCol.title || '').toLowerCase().trim();
+      if (titleLower.includes('aprov')) {
+        return true;
+      }
+    }
+  }
+
+  // 3. Fallback para colunas persistidas no localStorage
+  try {
+    const saved = localStorage.getItem('agency_kanban_columns');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        const matchedCol = parsed.find((c: any) => c.id && c.id.toLowerCase().trim() === colLower);
+        if (matchedCol && (matchedCol.title || '').toLowerCase().trim().includes('aprov')) {
+          return true;
+        }
+      }
+    }
+  } catch {}
+
+  return false;
+};
 
 const defaultFallbackClient: Client = {
   id: 'client-portal-pub',
@@ -90,6 +142,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
   demands,
   clients,
   invoices = [],
+  columns = [],
   currentUser,
   onClientApprovalAction,
   onOpenWhatsAppNotification,
@@ -166,18 +219,77 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     });
   }, [demands, activeClient]);
 
-  // Contagem de demandas para a "Visão geral"
+  // Regra Oficial: No portal do cliente, em conteúdo, mostrar SOMENTE para o cliente a demanda que estiver na coluna Aprovação Cliente
   const pendingApprovalDemands = useMemo(() => {
-    return clientDemands.filter(d => 
-      d.columnId === 'aprovacao' || 
-      d.approvalStatus === 'pendente' || 
-      (!d.approvalStatus && d.columnId === 'aprovacao')
-    );
-  }, [clientDemands]);
+    return clientDemands.filter((d) => {
+      const isColApproval = isAprovacaoClienteColumn(d.columnId, columns);
+      const notDone = d.columnId !== 'agendamento' && d.columnId !== 'concluidas';
+      return isColApproval && notDone;
+    });
+  }, [clientDemands, columns]);
 
+  // Se o usuário logado for cliente, apenas demandas de aprovação cliente contam como ativas
   const activeDemandsCount = useMemo(() => {
+    if (isClientRole) {
+      return pendingApprovalDemands.length;
+    }
     return clientDemands.filter(d => d.columnId !== 'concluidas').length;
-  }, [clientDemands]);
+  }, [clientDemands, isClientRole, pendingApprovalDemands]);
+
+  // Estado da aba Conteúdo (Busca, Filtro de Tipo e Modal de Preview da Peça)
+  const [conteudoSearch, setConteudoSearch] = useState('');
+  const [conteudoTypeFilter, setConteudoTypeFilter] = useState<string>('todos');
+  const [previewPost, setPreviewPost] = useState<DemandItem | null>(null);
+  const [expandedCaptionIds, setExpandedCaptionIds] = useState<Record<string, boolean>>({});
+  const [copiedCaption, setCopiedCaption] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+
+  const toggleCaption = (demandId: string) => {
+    setExpandedCaptionIds(prev => ({ ...prev, [demandId]: !prev[demandId] }));
+  };
+
+  const handleCopyCaption = (text: string) => {
+    if (!text) return;
+    navigator.clipboard?.writeText?.(text);
+    setCopiedCaption(true);
+    setActionNotice('Legenda copiada para a área de transferência!');
+    setTimeout(() => {
+      setCopiedCaption(false);
+      setActionNotice(null);
+    }, 3000);
+  };
+
+  const handleCopyEmail = (emailStr: string) => {
+    if (!emailStr) return;
+    navigator.clipboard?.writeText?.(emailStr);
+    setCopiedEmail(true);
+    setActionNotice('E-mail copiado!');
+    setTimeout(() => {
+      setCopiedEmail(false);
+      setActionNotice(null);
+    }, 2500);
+  };
+
+  // Demandas filtradas para a aba Conteúdo
+  const filteredConteudoDemands = useMemo(() => {
+    return pendingApprovalDemands.filter((d) => {
+      if (conteudoSearch.trim()) {
+        const q = conteudoSearch.toLowerCase();
+        const matchesTitle = (d.title || '').toLowerCase().includes(q);
+        const matchesDesc = (d.description || '').toLowerCase().includes(q);
+        const matchesType = (d.type || '').toLowerCase().includes(q);
+        if (!matchesTitle && !matchesDesc && !matchesType) return false;
+      }
+      if (conteudoTypeFilter !== 'todos') {
+        const dType = (d.type || '').toLowerCase();
+        if (conteudoTypeFilter === 'post' && !dType.includes('post') && !dType.includes('feed') && !dType.includes('estático') && !dType.includes('estatico')) return false;
+        if (conteudoTypeFilter === 'stories' && !dType.includes('stor')) return false;
+        if (conteudoTypeFilter === 'carrossel' && !dType.includes('carrossel')) return false;
+        if (conteudoTypeFilter === 'reels' && !dType.includes('reel') && !dType.includes('vídeo') && !dType.includes('video')) return false;
+      }
+      return true;
+    });
+  }, [pendingApprovalDemands, conteudoSearch, conteudoTypeFilter]);
 
   const projectsCount = useMemo(() => {
     const set = new Set<string>();
@@ -463,9 +575,15 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                   <span>E-mail</span>
                 </div>
                 <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
-                <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono">
-                  {activeClient.email || 'contato@exemplo.com.br'}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyEmail(activeClient.email || 'contato@exemplo.com.br')}
+                  className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono hover:text-[#ff9900] transition-colors cursor-pointer flex items-center gap-1 group"
+                  title="Clique para copiar e-mail"
+                >
+                  <span>{activeClient.email || 'contato@exemplo.com.br'}</span>
+                  {copiedEmail ? <Check size={12} className="text-emerald-500" /> : <Copy size={11} className="text-slate-400 group-hover:text-[#ff9900]" />}
+                </button>
               </div>
 
               {/* Linha 3: Telefone */}
@@ -475,9 +593,27 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                   <span>Telefone</span>
                 </div>
                 <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
-                <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono">
-                  {activeClient.phone || '(21) 90000-0000'}
-                </span>
+                {(() => {
+                  const rawPhone = activeClient.phone || '(21) 90000-0000';
+                  const cleanP = rawPhone.replace(/\D/g, '');
+                  const wa = cleanP.length >= 10 ? `https://wa.me/55${cleanP}` : undefined;
+                  return wa ? (
+                    <a
+                      href={wa}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1 group"
+                      title="Abrir no WhatsApp"
+                    >
+                      <span>{rawPhone}</span>
+                      <ExternalLink size={11} className="text-slate-400 group-hover:text-emerald-500" />
+                    </a>
+                  ) : (
+                    <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono">
+                      {rawPhone}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Linha 4: Mensalidade */}
@@ -582,119 +718,249 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
       {/* ==================================================================== */}
       {activeTab === 'conteudo' && (
         <div className="space-y-5">
-          <div className="bg-white dark:bg-[#0c1424] rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Fila de Aprovação de Conteúdos
-              </h2>
-              <p className="text-xs text-slate-500">
-                Materiais e publicações preparados pela agência aguardando a sua revisão e aprovação.
+          {/* Cabeçalho da Aba com Explicação & Contador */}
+          <div className="bg-white dark:bg-[#0c1424] rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ff9900] animate-pulse" />
+                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  Fila de Aprovação de Conteúdos
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+                Materiais e peças preparadas pela agência aguardando a sua revisão e aprovação. Somente demandas posicionadas na coluna <strong className="text-[#ff9900] font-bold">Aprovação Cliente</strong> ficam visíveis aqui para garantir máxima privacidade e controle.
               </p>
             </div>
             {pendingApprovalDemands.length > 0 && (
-              <span className="px-3 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-500/30">
-                {pendingApprovalDemands.length} pendente(s)
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="px-3.5 py-1.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-500/30 flex items-center gap-1.5 shadow-2xs">
+                  <Clock size={13} className="text-[#ff9900]" />
+                  <span>{pendingApprovalDemands.length} post(s) pendente(s)</span>
+                </span>
+              </div>
             )}
           </div>
 
+          {/* Barra de Filtros & Busca se houver demandas */}
+          {pendingApprovalDemands.length > 0 && (
+            <div className="bg-white dark:bg-[#0c1424] rounded-2xl p-3 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Campo de Busca */}
+              <div className="relative flex-1">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={conteudoSearch}
+                  onChange={(e) => setConteudoSearch(e.target.value)}
+                  placeholder="Buscar material por título, legenda ou formato..."
+                  className="w-full pl-9 pr-3.5 py-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#ff9900]"
+                />
+                {conteudoSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setConteudoSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Pílulas de Filtro de Formato */}
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 md:pb-0">
+                <span className="text-[11px] font-semibold text-slate-400 pl-1 shrink-0 flex items-center gap-1">
+                  <Filter size={12} /> Formato:
+                </span>
+                {[
+                  { id: 'todos', label: 'Todos' },
+                  { id: 'post', label: 'Feed' },
+                  { id: 'carrossel', label: 'Carrossel' },
+                  { id: 'stories', label: 'Stories' },
+                  { id: 'reels', label: 'Reels/Vídeo' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setConteudoTypeFilter(item.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all cursor-pointer ${
+                      conteudoTypeFilter === item.id
+                        ? 'bg-[#142142] dark:bg-white text-white dark:text-[#142142] shadow-2xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Listagem de Posts Aguardando Aprovação */}
           {pendingApprovalDemands.length === 0 ? (
-            <div className="bg-white dark:bg-[#0c1424] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 mx-auto flex items-center justify-center">
-                <CheckCircle2 size={24} />
+            <div className="bg-white dark:bg-[#0c1424] rounded-3xl border border-slate-200/80 dark:border-slate-800 p-12 text-center space-y-4 shadow-2xs">
+              <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 mx-auto flex items-center justify-center shadow-2xs">
+                <CheckCircle2 size={28} />
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Tudo em dia por aqui!
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Não há conteúdos pendentes de aprovação no momento. A equipe criativa está desenvolvendo os próximos materiais da sua marca.
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                  Tudo em dia por aqui!
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Não há conteúdos pendentes na coluna <strong className="text-[#ff9900]">Aprovação Cliente</strong> no momento. Assim que a agência finalizar as criações e mover para aprovação, elas aparecerão aqui para você conferir.
+                </p>
+              </div>
+            </div>
+          ) : filteredConteudoDemands.length === 0 ? (
+            <div className="bg-white dark:bg-[#0c1424] rounded-3xl border border-slate-200/80 dark:border-slate-800 p-10 text-center space-y-3 shadow-2xs">
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                Nenhum material encontrado com os filtros atuais.
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setConteudoSearch('');
+                  setConteudoTypeFilter('todos');
+                }}
+                className="text-xs font-bold text-[#ff9900] hover:underline cursor-pointer"
+              >
+                Limpar filtros de busca
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {pendingApprovalDemands.map((post) => (
-                <div
-                  key={post.id}
-                  className="bg-white dark:bg-[#0c1424] rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden flex flex-col justify-between hover:shadow-md transition-all"
-                >
-                  <div>
-                    {/* Imagem / Thumbnail */}
-                    <div className="h-48 w-full bg-slate-100 dark:bg-slate-900 relative overflow-hidden group">
-                      {post.thumbnail ? (
-                        <img
-                          src={post.thumbnail}
-                          alt={post.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-2 p-4 text-center">
-                          <FileText size={32} className="text-[#ff9900]" />
-                          <span className="text-xs font-semibold">Post para Mídias Sociais</span>
-                        </div>
-                      )}
-                      <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold">
-                        {post.type || 'Post'}
-                      </span>
-                    </div>
+              {filteredConteudoDemands.map((post) => {
+                const isCaptionExpanded = Boolean(expandedCaptionIds[post.id]);
+                const hasLongCaption = (post.description || '').length > 130;
 
-                    {/* Conteúdo textual */}
-                    <div className="p-5 space-y-2.5">
-                      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
-                        <span>{post.id}</span>
-                        {post.dueDate && (
-                          <span className="flex items-center gap-1 font-mono">
-                            <Calendar size={12} /> {post.dueDate}
-                          </span>
+                return (
+                  <div
+                    key={post.id}
+                    className="bg-white dark:bg-[#0c1424] rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden flex flex-col justify-between hover:shadow-md transition-all group"
+                  >
+                    <div>
+                      {/* Visualizador do Post (Proporção amigável para Social Media) */}
+                      <div className="aspect-[4/3] w-full bg-slate-100 dark:bg-slate-900 relative overflow-hidden">
+                        {post.thumbnail ? (
+                          <img
+                            src={post.thumbnail}
+                            alt={post.title}
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-2 p-4 text-center bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-[#ff9900] flex items-center justify-center">
+                              <FileText size={24} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Peça Publicitária</span>
+                            <span className="text-[11px] text-slate-400">Clique para abrir detalhes</span>
+                          </div>
                         )}
+
+                        {/* Tag de Formato (canto superior esquerdo) */}
+                        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                          <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold shadow-xs">
+                            {post.type || 'Post Feed'}
+                          </span>
+                        </div>
+
+                        {/* Botão de Ver em Tela Cheia / Zoom (canto superior direito) */}
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPost(post)}
+                          className="absolute top-3 right-3 p-2 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-xs text-white transition-all cursor-pointer shadow-xs"
+                          title="Visualizar em tamanho grande"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
+
+                        {/* Badge de Aprovação Pendente na base da imagem */}
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-500/90 text-[#142142] text-[10px] font-extrabold backdrop-blur-xs shadow-xs">
+                            Aguardando Aprovação
+                          </span>
+                        </div>
                       </div>
 
-                      <h3 className="font-bold text-sm text-slate-900 dark:text-white line-clamp-2">
-                        {post.title}
-                      </h3>
+                      {/* Informações Textuais & Metadados do Post */}
+                      <div className="p-5 space-y-3">
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                          <span className="font-mono font-semibold">{post.id}</span>
+                          {post.dueDate && (
+                            <span className="flex items-center gap-1 font-mono text-slate-600 dark:text-slate-300 font-medium">
+                              <Calendar size={12} className="text-[#ff9900]" /> {post.dueDate}
+                            </span>
+                          )}
+                        </div>
 
-                      {post.description && (
-                        <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 leading-relaxed">
-                          {post.description}
-                        </p>
-                      )}
+                        <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2 leading-snug">
+                          {post.title}
+                        </h3>
+
+                        {post.description && (
+                          <div className="space-y-1">
+                            <p className={`text-xs text-slate-600 dark:text-slate-400 leading-relaxed ${!isCaptionExpanded && hasLongCaption ? 'line-clamp-3' : ''}`}>
+                              {post.description}
+                            </p>
+                            {hasLongCaption && (
+                              <button
+                                type="button"
+                                onClick={() => toggleCaption(post.id)}
+                                className="text-[11px] font-bold text-[#ff9900] hover:underline cursor-pointer"
+                              >
+                                {isCaptionExpanded ? 'Ver menos' : 'Ver legenda completa...'}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Ações de Aprovação */}
-                  <div className="p-4 pt-0 space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => handleApprove(post.id)}
-                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-                    >
-                      <ThumbsUp size={14} />
-                      <span>Aprovar Post</span>
-                    </button>
-
-                    <div className="grid grid-cols-2 gap-2">
+                    {/* Ações de Aprovação do Cliente */}
+                    <div className="p-5 pt-0 space-y-2">
+                      {/* Botão Principal: Aprovar Post */}
                       <button
                         type="button"
-                        onClick={() => handleOpenAdjustModal(post)}
-                        className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        onClick={() => handleApprove(post.id)}
+                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
                       >
-                        <Edit3 size={13} />
-                        <span>Ajustes</span>
+                        <ThumbsUp size={14} />
+                        <span>Aprovar Post</span>
                       </button>
 
+                      {/* Ações Secundárias: Ajustes, Reprovar e Ver Detalhes */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAdjustModal(post)}
+                          className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Edit3 size={13} />
+                          <span>Solicitar Ajustes</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onClientApprovalAction(post.id, 'reprovado', 'Material reprovado pelo cliente')}
+                          className="py-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <X size={13} />
+                          <span>Reprovar</span>
+                        </button>
+                      </div>
+
+                      {/* Botão de Análise Completa em Modal */}
                       <button
                         type="button"
-                        onClick={() => onClientApprovalAction(post.id, 'reprovado', 'Material reprovado pelo cliente')}
-                        className="py-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        onClick={() => setPreviewPost(post)}
+                        className="w-full py-1.5 text-center text-[11px] font-medium text-slate-500 hover:text-[#ff9900] transition-colors cursor-pointer flex items-center justify-center gap-1"
                       >
-                        <X size={13} />
-                        <span>Reprovar</span>
+                        <Eye size={12} />
+                        <span>Visualizar em alta resolução</span>
                       </button>
                     </div>
-                  </div>
 
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1001,6 +1267,171 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                 </button>
               </div>
             </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 10. MODAL: PREVIEW DETALHADO DO POST (LIGHTBOX & ANÁLISE COMPLETA)   */}
+      {/* ==================================================================== */}
+      {previewPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-4xl max-h-[92vh] bg-white dark:bg-[#0c1424] rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col md:flex-row">
+            
+            {/* Coluna da Esquerda: Arte / Criativo em Tamanho Grande */}
+            <div className="md:w-3/5 bg-slate-950 flex flex-col items-center justify-center relative p-4 min-h-[320px] md:min-h-[500px]">
+              {previewPost.thumbnail ? (
+                <img
+                  src={previewPost.thumbnail}
+                  alt={previewPost.title}
+                  className="max-h-[75vh] w-auto max-w-full object-contain rounded-2xl shadow-lg"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-slate-400 gap-3 p-8 text-center">
+                  <FileText size={48} className="text-[#ff9900]" />
+                  <p className="font-bold text-sm text-slate-200">Arquivo Criativo do Post</p>
+                  <p className="text-xs text-slate-400 max-w-xs">Arte preparada para publicação nas redes sociais da marca.</p>
+                </div>
+              )}
+
+              {/* Botão de Fechar no Mobile (Sobre a imagem) */}
+              <button
+                type="button"
+                onClick={() => setPreviewPost(null)}
+                className="md:hidden absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+
+              {/* Tag de Formato na base da imagem */}
+              <div className="absolute bottom-4 left-4 flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-xs text-white text-xs font-bold shadow-xs">
+                  {previewPost.type || 'Post Feed'}
+                </span>
+                {previewPost.thumbnail && (
+                  <a
+                    href={previewPost.thumbnail}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+                    title="Abrir imagem original em nova aba"
+                  >
+                    <ExternalLink size={14} />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Coluna da Direita: Dados, Legenda e Ações Rápidas */}
+            <div className="md:w-2/5 p-6 flex flex-col justify-between overflow-y-auto max-h-[50vh] md:max-h-[92vh] space-y-5 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800">
+              
+              <div className="space-y-4">
+                {/* Cabeçalho do modal */}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-mono font-bold text-[#ff9900] uppercase tracking-wider">
+                      {previewPost.id}
+                    </span>
+                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug">
+                      {previewPost.title}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPost(null)}
+                    className="hidden md:flex p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Metadados: Data de publicação e Status */}
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Calendar size={13} className="text-[#ff9900]" /> Agendamento:
+                    </span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
+                      {previewPost.dueDate || 'A definir'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Clock size={13} className="text-[#ff9900]" /> Status:
+                    </span>
+                    <span className="font-bold text-amber-600 dark:text-amber-400">
+                      Aguardando Sua Aprovação
+                    </span>
+                  </div>
+                </div>
+
+                {/* Texto da Legenda / Copy */}
+                {previewPost.description && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Texto da Legenda (Copy)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCaption(previewPost.description || '')}
+                        className="text-[11px] font-semibold text-[#ff9900] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedCaption ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                        <span>{copiedCaption ? 'Copiada!' : 'Copiar Texto'}</span>
+                      </button>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto scrollbar-thin font-sans">
+                      {previewPost.description}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Botões de Ação na Base da Coluna Direita */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleApprove(previewPost.id);
+                    setPreviewPost(null);
+                  }}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                >
+                  <ThumbsUp size={15} />
+                  <span>Aprovar Este Material</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = previewPost;
+                      setPreviewPost(null);
+                      handleOpenAdjustModal(p);
+                    }}
+                    className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Edit3 size={13} />
+                    <span>Pedir Ajustes</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClientApprovalAction(previewPost.id, 'reprovado', 'Material reprovado pelo cliente');
+                      setPreviewPost(null);
+                    }}
+                    className="py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <X size={13} />
+                    <span>Reprovar</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
 
           </div>
         </div>

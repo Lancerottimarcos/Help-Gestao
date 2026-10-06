@@ -2432,6 +2432,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
             demands={demands}
             clients={clients}
             invoices={invoices}
+            columns={kanbanColumns}
             currentUser={effectiveUser}
             onClientApprovalAction={handleClientApprovalAction}
             onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}
@@ -2451,6 +2452,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
               demands={demands}
               clients={clients}
               invoices={invoices}
+              columns={kanbanColumns}
               currentUser={effectiveUser}
               onClientApprovalAction={handleClientApprovalAction}
               onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}

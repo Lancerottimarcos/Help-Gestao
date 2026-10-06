@@ -170,7 +170,8 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
     return scopedDemands.filter((d) => {
       // Status filter
       if (selectedStatusFilter === 'pendente') {
-        const isPending = d.columnId === 'aprovacao' || d.approvalStatus === 'pendente' || (!d.approvalStatus && d.columnId === 'aprovacao');
+        const isApprovalCol = d.columnId === 'aprovacao' || d.columnId === 'aprovacao-cliente' || d.columnId === 'aprovacao_cliente' || (d.columnId && d.columnId.toLowerCase().includes('aprov'));
+        const isPending = isApprovalCol && d.approvalStatus !== 'aprovado' && d.approvalStatus !== 'reprovado';
         if (!isPending) return false;
       } else if (selectedStatusFilter === 'aprovado') {
         const isApproved = d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas';
