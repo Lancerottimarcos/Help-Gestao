@@ -37,7 +37,7 @@ import {
   LogIn,
   Database
 } from 'lucide-react';
-import { Client, DemandItem, PageId, ClientHistoryEvent, Invoice } from '../types';
+import { Client, DemandItem, PageId, ClientHistoryEvent, Invoice, Service } from '../types';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { 
   exportClientDossierJSON, 
@@ -51,6 +51,7 @@ import { supabaseService } from '../services/supabaseService';
 interface ClientDetailDrawerProps {
   client: Client;
   demands: DemandItem[];
+  services?: Service[];
   invoices?: Invoice[];
   onClose: () => void;
   onEditClient?: () => void;
@@ -67,6 +68,7 @@ type TabType = 'overview' | 'services' | 'access' | 'history' | 'privacy';
 export const ClientDetailDrawer: React.FC<ClientDetailDrawerProps> = ({
   client,
   demands,
+  services = [],
   invoices = [],
   onClose,
   onEditClient,
@@ -813,34 +815,55 @@ export const ClientDetailDrawer: React.FC<ClientDetailDrawerProps> = ({
                 {/* Associated Contracted Services */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Serviços Contratados no Pacote
-                    </h3>
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Serviços Contratados no Pacote
+                      </h3>
+                      {client.monthlyFee > 0 && (
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                          Mensalidade Contratada: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(client.monthlyFee)}
+                        </p>
+                      )}
+                    </div>
                     <span className="text-xs font-semibold text-slate-400">
-                      {client.services.length} serviços
+                      {client.services.length} {client.services.length === 1 ? 'serviço' : 'serviços'}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 gap-2.5">
-                    {client.services.map((srv, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3.5 rounded-xl bg-[#F8F9FA] border border-slate-200/80 flex items-center justify-between gap-3"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-[#142142] text-[#fab518] flex items-center justify-center shrink-0">
-                            <Layers size={16} />
+                    {client.services.map((srv, idx) => {
+                      const matchedService = services.find(
+                        (s) => (s.title || s.name || '').trim().toLowerCase() === srv.trim().toLowerCase()
+                      );
+                      const priceVal = matchedService ? (matchedService.basePrice ?? matchedService.price) : (idx === 0 && client.monthlyFee > 0 ? client.monthlyFee : null);
+
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3.5 rounded-xl bg-[#F8F9FA] dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-[#142142] text-[#fab518] flex items-center justify-center shrink-0">
+                              <Layers size={16} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-[#142142] dark:text-white truncate">{srv}</p>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400">Serviço ativo e recorrente</span>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-xs sm:text-sm font-bold text-[#142142]">{srv}</p>
-                            <span className="text-[11px] text-slate-500">Serviço ativo e recorrente</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {priceVal ? (
+                              <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-md bg-[#fab518]/20 text-[#142142] dark:text-[#fab518] border border-[#fab518]/40">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(priceVal)}
+                              </span>
+                            ) : null}
+                            <span className="text-[11px] font-bold px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800">
+                              Ativo
+                            </span>
                           </div>
                         </div>
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">
-                          Ativo
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 

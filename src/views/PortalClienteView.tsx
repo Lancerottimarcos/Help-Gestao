@@ -676,15 +676,68 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                 })()}
               </div>
 
-              {/* Linha 4: Mensalidade */}
+              {/* Linha 4: Valor do serviço contratado */}
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium shrink-0">
-                  <Wallet size={15} className="text-slate-400" />
-                  <span>Mensalidade</span>
+                  <Briefcase size={15} className="text-[#ff9900]" />
+                  <span>Valor do serviço contratado</span>
                 </div>
                 <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
-                <span className="font-black text-slate-900 dark:text-white shrink-0 text-right font-mono">
-                  R$ {(activeClient.monthlyFee || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                <span 
+                  className="font-black text-slate-900 dark:text-white shrink-0 text-right font-mono flex items-center gap-1.5"
+                  title="Valor do serviço contratado pelo cliente"
+                >
+                  {isEditingContractValue ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-xs font-bold text-slate-400">R$</span>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={tempContractValue}
+                        onChange={(e) => setTempContractValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveContractValue();
+                          if (e.key === 'Escape') setIsEditingContractValue(false);
+                        }}
+                        className="w-24 px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-slate-800 border border-[#ff9900] rounded-md text-slate-900 dark:text-white focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveContractValue}
+                        className="p-1 rounded bg-[#ff9900] text-[#142142] hover:bg-[#ff9900]/90 text-[10px] font-bold cursor-pointer"
+                        title="Salvar valor"
+                      >
+                        <Check size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingContractValue(false)}
+                        className="p-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 text-[10px] cursor-pointer"
+                        title="Cancelar"
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ) : (
+                    <>
+                      <span>
+                        R$ {contractedServiceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      {onUpdateClient && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempContractValue(contractedServiceValue.toString());
+                            setIsEditingContractValue(true);
+                          }}
+                          className="opacity-60 hover:opacity-100 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-[#ff9900] transition-all cursor-pointer"
+                          title="Editar valor do serviço contratado"
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                      )}
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -1099,10 +1152,10 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-2">
               <span className="text-xs text-amber-800 dark:text-amber-300 font-bold uppercase tracking-wider">
-                Mensalidade Contratada
+                Valor do Serviço Contratado / Mensalidade
               </span>
               <p className="text-3xl font-black text-slate-900 dark:text-white font-mono">
-                R$ {(activeClient.monthlyFee || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                R$ {contractedServiceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-slate-500">
                 Serviços inclusos: {(activeClient.services && activeClient.services.length > 0 ? activeClient.services.join(', ') : 'Nenhum serviço registrado')}

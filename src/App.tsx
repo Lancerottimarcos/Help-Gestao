@@ -79,23 +79,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Limpeza completa e inicialização oficial para o lançamento limpo do sistema
-  try {
-    const launchCleanKey = 'agency_system_official_launch_v4_clean_all_system_data';
-    if (!localStorage.getItem(launchCleanKey)) {
-      localStorage.setItem(launchCleanKey, 'true');
-      localStorage.setItem('agency_clients', JSON.stringify([]));
-      localStorage.setItem('agency_demands', JSON.stringify([]));
-      localStorage.setItem('agency_demands_v2', JSON.stringify([]));
-      localStorage.setItem('agency_services', JSON.stringify([]));
-      localStorage.setItem('agency_proposals', JSON.stringify([]));
-      localStorage.setItem('agency_invoices', JSON.stringify([]));
-      localStorage.setItem('agency_suppliers', JSON.stringify([]));
-      localStorage.setItem('agency_activities', JSON.stringify([]));
-      localStorage.setItem('agency_recent_activities', JSON.stringify([]));
-    }
-  } catch {}
-
   // Main state data with local persistence for production readiness
   const [demands, setDemands] = useState<DemandItem[]>(() => {
     try {
@@ -463,10 +446,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       }
 
       // Se o Supabase tiver demandas gravadas
-      if (remoteDemands && Array.isArray(remoteDemands)) {
+      if (remoteDemands && Array.isArray(remoteDemands) && remoteDemands.length > 0) {
         const deletedIds = getDeletedDemandIds();
         const cleanRemoteDemands = remoteDemands.filter((d) => !deletedIds.has(d.id));
-        const isRecentlyEditedLocally = isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 4000);
+        const isRecentlyEditedLocally = isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 30000);
 
         if (!isRecentlyEditedLocally && cleanRemoteDemands.length > 0) {
           setDemands((prevLocal) => {
@@ -477,6 +460,8 @@ export function Layout({ children, onLogout }: LayoutProps) {
               if (!rem) return loc;
               return {
                 ...rem,
+                ...loc,
+                columnId: loc.columnId || rem.columnId,
                 clientId: rem.clientId || loc.clientId,
                 client: rem.client || loc.client,
                 clientProject: rem.clientProject || loc.clientProject,
@@ -668,13 +653,16 @@ export function Layout({ children, onLogout }: LayoutProps) {
             const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
             const localPending = cleanPrev.filter((d) => !remoteMap.has(d.id));
 
-            // Preserva alterações locais recentes feitas há menos de 15 segundos
-            const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 15000);
+            // Preserva alterações locais recentes feitas há menos de 30 segundos
+            const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 30000);
+            if (isRecentlyEditedLocally) {
+              return prev;
+            }
+
             const merged = cleanRemote.map((rem) => {
               const loc = cleanPrev.find((p) => p.id === rem.id);
               if (!loc) return rem;
-              if (isRecentlyEditedLocally) return loc;
-              return { ...rem, ...loc, columnId: rem.columnId || loc.columnId };
+              return { ...rem, ...loc, columnId: loc.columnId || rem.columnId };
             });
 
             // Adiciona as demandas cadastradas localmente pendentes de sincronização
@@ -1471,17 +1459,14 @@ export function Layout({ children, onLogout }: LayoutProps) {
     removeDeletedDemandId(newDemand.id);
     lastLocalDemandUpdateRef.current = Date.now();
 
-    let updatedDemands: DemandItem[] = [];
     setDemands((prev) => {
       const updated = [newDemand, ...prev.filter((d) => d.id !== newDemand.id)];
-      updatedDemands = updated;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
+      serverDbService.saveDatabase({ demands: updated }, true);
       return updated;
     });
-
-    const demandsToSave = updatedDemands.length > 0 ? updatedDemands : [newDemand, ...demands];
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
@@ -1498,12 +1483,14 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ demands: demandsToSave, clients: updatedClients }, true);
+      serverDbService.saveDatabase({ clients: updatedClients }, true);
       return updatedClients;
     });
 
-    // Sincroniza em background com o Supabase PostgreSQL
-    supabaseService.upsertDemand(newDemand);
+    // Sincroniza em background com o Supabase PostgreSQL se configurado
+    if (supabaseService.isConfigured()) {
+      supabaseService.upsertDemand(newDemand);
+    }
 
     // Notificação de WhatsApp ao criar em aprovação desabilitada temporariamente (recurso futuro)
     // if (newDemand.columnId === 'aprovacao') {
@@ -1568,22 +1555,21 @@ export function Layout({ children, onLogout }: LayoutProps) {
         : {}),
     };
 
-    let updatedDemandsList: DemandItem[] = [];
+    lastLocalDemandUpdateRef.current = Date.now();
+
     setDemands((prev) => {
       const updated = prev.map((item) => (item.id === finalDemand.id ? finalDemand : item));
-      updatedDemandsList = updated;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
+      serverDbService.saveDatabase({ demands: updated }, true);
       return updated;
     });
-
-    const demandsToPersist = updatedDemandsList.length > 0 ? updatedDemandsList : demands.map((item) => (item.id === finalDemand.id ? finalDemand : item));
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
       const updatedClients = prevClients.map((c) => {
-        const count = demandsToPersist.filter(d => {
+        const count = demands.map((item) => (item.id === finalDemand.id ? finalDemand : item)).filter(d => {
           return (d.clientId === c.id || d.client.toLowerCase() === c.name.toLowerCase()) && d.columnId !== 'concluidas';
         }).length;
         return { ...c, activeDemandsCount: count };
@@ -1591,14 +1577,13 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ demands: demandsToPersist, clients: updatedClients }, true);
+      serverDbService.saveDatabase({ clients: updatedClients }, true);
       return updatedClients;
     });
 
-    lastLocalDemandUpdateRef.current = Date.now();
-
-    // Sincroniza em background com o Supabase PostgreSQL
-    supabaseService.upsertDemand(finalDemand);
+    if (supabaseService.isConfigured()) {
+      supabaseService.upsertDemand(finalDemand);
+    }
 
     // Notificação de WhatsApp ao mover/salvar para aprovação desabilitada temporariamente (recurso futuro)
     // if (wasJustMovedToApproval) {

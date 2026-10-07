@@ -22,11 +22,7 @@ function isFirestoreQuotaExhausted(): boolean {
     if (fs.existsSync(FIRESTORE_STATUS_FILE)) {
       const data = JSON.parse(fs.readFileSync(FIRESTORE_STATUS_FILE, "utf-8"));
       if (data && data.quotaExhausted) {
-        // Se a cota foi esgotada nas últimas 12 horas, mantém desabilitado para evitar loops de erro gRPC
-        const elapsed = Date.now() - (data.exhaustedAt || 0);
-        if (elapsed < 12 * 60 * 60 * 1000) {
-          return true;
-        }
+        return true;
       }
     }
   } catch {}

@@ -123,6 +123,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [newClientSegment, setNewClientSegment] = useState('');
   const [newClientServices, setNewClientServices] = useState<string[]>(['Gestão de Redes Sociais', 'Tráfego Pago']);
   const [newCustomServiceInput, setNewCustomServiceInput] = useState('');
+  const [newClientMonthlyFee, setNewClientMonthlyFee] = useState<number>(2500);
   
   // Endereço
   const [newClientCep, setNewClientCep] = useState('');
@@ -180,7 +181,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [editCustomServiceInput, setEditCustomServiceInput] = useState('');
 
   const allAvailableServices = useMemo(() => {
-    const registered = (services || []).map((s) => s.title).filter(Boolean);
+    const registered = (services || []).map((s) => s.title || s.name || '').filter(Boolean);
     const fromClients = clients.flatMap((c) => c.services || []).filter(Boolean);
     return Array.from(new Set([...registered, ...defaultAgencyServices, ...fromClients]));
   }, [services, clients, defaultAgencyServices]);
@@ -318,7 +319,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
       coverColor: editCoverColor,
       avatar: editAvatar.trim() || editingClient.avatar || 'https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=120&auto=format&fit=crop&q=80',
       status: editStatus,
-      monthlyFee: editingClient.monthlyFee || 0,
+      monthlyFee: editMonthlyFee,
       portalUsername: editPortalUser.trim().toLowerCase().replace(/^@/, '') || undefined,
       portalPassword: editPortalPass.trim() || '123456',
       portalAccessEnabled: editPortalEnabled,
@@ -372,7 +373,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
       coverColor: newClientCoverColor,
       avatar: newClientAvatar.trim() || defaultFallbackAvatar,
       status: 'Ativo',
-      monthlyFee: 0,
+      monthlyFee: newClientMonthlyFee || 0,
       services: newClientServices.length > 0 ? newClientServices : ['Gestão de Redes Sociais'],
       activeDemandsCount: 0,
       joinedDate: new Date().toISOString().split('T')[0],
@@ -390,6 +391,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
     setNewClientSegment('');
     setNewClientServices(['Gestão de Redes Sociais', 'Tráfego Pago']);
     setNewCustomServiceInput('');
+    setNewClientMonthlyFee(2500);
     setNewClientCep('');
     setNewClientStreet('');
     setNewClientNumber('');
@@ -712,26 +714,46 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                 )}
               </div>
 
-              {/* Serviços Contratados */}
-              {client.services && client.services.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 mb-3.5">
-                  {client.services.slice(0, 2).map((srv, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 max-w-[140px] truncate"
-                      title={srv}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#fab518] shrink-0" />
-                      <span className="truncate">{srv}</span>
+              {/* Serviços Contratados e Valores */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-3.5">
+                {client.services && client.services.length > 0 ? (
+                  client.services.slice(0, 3).map((srv, idx) => {
+                    const matchedService = services?.find(
+                      (s) => (s.title || s.name || '').trim().toLowerCase() === srv.trim().toLowerCase()
+                    );
+                    const feeVal = matchedService ? (matchedService.basePrice ?? matchedService.price) : (client.monthlyFee > 0 ? client.monthlyFee : null);
+
+                    return (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-900 dark:text-amber-200 border border-amber-500/25 max-w-full"
+                        title={`${srv}${feeVal ? ` • ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(feeVal)}` : ''}`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#fab518] shrink-0" />
+                        <span className="truncate max-w-[120px] font-medium">{srv}</span>
+                        {feeVal ? (
+                          <span className="font-mono font-black text-[#142142] dark:text-[#fab518] bg-[#fab518]/30 dark:bg-[#fab518]/20 px-1.5 py-0.2 rounded text-[10px] shrink-0 border border-[#fab518]/40">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(feeVal)}
+                          </span>
+                        ) : null}
+                      </span>
+                    );
+                  })
+                ) : client.monthlyFee > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-900 dark:text-amber-200 border border-amber-500/25">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fab518] shrink-0" />
+                    <span>Serviço Contratado</span>
+                    <span className="font-mono font-black text-[#142142] dark:text-[#fab518] bg-[#fab518]/30 dark:bg-[#fab518]/20 px-1.5 py-0.2 rounded text-[10px] border border-[#fab518]/40">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(client.monthlyFee)}
                     </span>
-                  ))}
-                  {client.services.length > 2 && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                      +{client.services.length - 2}
-                    </span>
-                  )}
-                </div>
-              )}
+                  </span>
+                ) : null}
+                {client.services && client.services.length > 3 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                    +{client.services.length - 3}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Bottom Footer */}
@@ -772,6 +794,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
         <ClientDetailDrawer
           client={selectedClient}
           demands={demands}
+          services={services}
           initialTab={drawerTab}
           onClose={() => setSelectedClient(null)}
           onEditClient={() => handleOpenEdit(selectedClient)}
@@ -1213,6 +1236,32 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* Campo: Valor do Serviço Contratado / Mensalidade */}
+                <div className="pt-3 border-t border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#142142] dark:text-white">
+                      Valor do Serviço Contratado / Mensalidade (R$)
+                    </label>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Valor cobrado mensalmente ou pacote do cliente
+                    </span>
+                  </div>
+                  <div className="relative w-full sm:w-48">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
+                      R$
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="50"
+                      placeholder="2500,00"
+                      value={newClientMonthlyFee || ''}
+                      onChange={(e) => setNewClientMonthlyFee(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-white dark:bg-slate-900 text-xs font-mono font-bold text-[#142142] dark:text-white pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all"
+                    />
                   </div>
                 </div>
               </div>
@@ -1927,6 +1976,32 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* Campo: Valor do Serviço Contratado / Mensalidade */}
+                <div className="pt-3 border-t border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#142142] dark:text-white">
+                      Valor do Serviço Contratado / Mensalidade (R$)
+                    </label>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Valor cobrado mensalmente ou pacote do cliente
+                    </span>
+                  </div>
+                  <div className="relative w-full sm:w-48">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
+                      R$
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="50"
+                      placeholder="0,00"
+                      value={editMonthlyFee || ''}
+                      onChange={(e) => setEditMonthlyFee(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-white dark:bg-slate-900 text-xs font-mono font-bold text-[#142142] dark:text-white pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all"
+                    />
                   </div>
                 </div>
               </div>

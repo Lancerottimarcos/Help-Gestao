@@ -169,9 +169,11 @@ export interface Client {
 export interface Service {
   id: string;
   title: string;
+  name?: string;
   category: 'Social Media' | 'Tráfego Pago' | 'Criação de Sites' | 'Consultoria';
   description: string;
   basePrice: number;
+  price?: number;
   isMonthly: boolean;
   deliverables: string[];
   activeClientsCount: number;
