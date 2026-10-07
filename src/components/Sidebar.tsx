@@ -319,31 +319,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isClientRole = activeUser.role === 'cliente';
 
-  const clientScopeName = (activeUser.clientName || activeUser.name || '').trim().toLowerCase();
-  const pendingApprovalsCount = useMemo(() => {
-    if (!isClientRole) return 0;
-    return demands.filter((d) => {
-      const matchClient =
-        (d.client && d.client.trim().toLowerCase() === clientScopeName) ||
-        (d.clientId && d.clientId === activeUser.clientId);
-      const isPending = d.columnId === 'aprovacao' || d.approvalStatus === 'pendente' || (!d.approvalStatus && d.columnId === 'aprovacao');
-      return matchClient && isPending;
-    }).length;
-  }, [isClientRole, demands, clientScopeName, activeUser.clientId]);
-
   const navItems: NavItemConfig[] = isClientRole
     ? [
         {
           id: 'portal-cliente',
           label: 'Meu Portal',
           icon: LayoutGrid,
-        },
-        {
-          id: 'aprovacoes',
-          label: 'Aprovações',
-          icon: CheckCircle2,
-          badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
-          badgeColor: 'bg-emerald-500 text-white',
         },
       ]
     : [

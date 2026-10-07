@@ -7,6 +7,7 @@ import {
   X, 
   Kanban, 
   LayoutDashboard, 
+  LayoutGrid,
   EyeOff,
   Users,
   Briefcase,
@@ -98,7 +99,7 @@ export const AccessDeniedView: React.FC<AccessDeniedViewProps> = ({
 
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
             {user?.role === 'cliente'
-              ? 'Como cliente, seu acesso é focado exclusivamente no Portal do Cliente e na Central de Aprovações para você acompanhar, aprovar ou solicitar ajustes em seus materiais e entregáveis.'
+              ? 'Como cliente, seu acesso é focado exclusivamente no Portal do Cliente para você acompanhar, aprovar ou solicitar ajustes em seus materiais e entregáveis.'
               : 'O administrador da agência (Marcos Lancerotti) definiu regras de segurança onde novos colaboradores têm o acesso bloqueado a esta seção estratégica.'}
           </p>
         </div>
@@ -164,24 +165,14 @@ export const AccessDeniedView: React.FC<AccessDeniedViewProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
           {user?.role === 'cliente' ? (
-            <>
-              <button
-                type="button"
-                onClick={() => onNavigate('demandas')}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#142142] hover:bg-[#1a2d59] text-[#fab518] text-xs font-black shadow-md transition-all cursor-pointer active:scale-95"
-              >
-                <Kanban size={14} />
-                <span>Ir para Portal do Cliente</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('aprovacoes')}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all cursor-pointer active:scale-95"
-              >
-                <Check size={14} />
-                <span>Central de Aprovações</span>
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => onNavigate('portal-cliente')}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#142142] hover:bg-[#1a2d59] text-[#fab518] text-xs font-black shadow-md transition-all cursor-pointer active:scale-95"
+            >
+              <LayoutGrid size={14} />
+              <span>Ir para Meu Portal</span>
+            </button>
           ) : (
             <>
               <button

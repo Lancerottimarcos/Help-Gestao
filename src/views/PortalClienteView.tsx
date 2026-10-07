@@ -166,8 +166,6 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
   const [adjustFeedbackText, setAdjustFeedbackText] = useState('');
   const [copiedPix, setCopiedPix] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
-  const [isEditingContractValue, setIsEditingContractValue] = useState(false);
-  const [tempContractValue, setTempContractValue] = useState('');
 
   // Seletor de cliente para administradores
   const isClientRole = currentUser?.role === 'cliente';
@@ -281,20 +279,25 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     return 2500;
   }, [activeClient, services, invoices]);
 
-  const handleSaveContractValue = () => {
-    const cleanStr = tempContractValue.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
-    const num = parseFloat(cleanStr);
-    if (!isNaN(num) && num >= 0 && onUpdateClient) {
-      const updatedClient: Client = {
-        ...activeClient,
-        monthlyFee: num,
-      };
-      onUpdateClient(updatedClient);
-      setActionNotice(`Valor do serviço contratado atualizado para R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-      setTimeout(() => setActionNotice(null), 3500);
+  // Data em que virou cliente (formatada para exibição na ficha)
+  const formattedJoinedDate = useMemo(() => {
+    if (!activeClient.joinedDate) return '15/01/2026';
+    const val = String(activeClient.joinedDate).trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) return val;
+    if (/^\d{4}-\d{2}-\d{2}/.test(val)) {
+      const parts = val.split('T')[0].split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
     }
-    setIsEditingContractValue(false);
-  };
+    try {
+      const d = new Date(val.includes('T') ? val : `${val}T00:00:00`);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('pt-BR');
+      }
+    } catch {}
+    return val;
+  }, [activeClient.joinedDate]);
 
   // Estado da aba Conteúdo (Busca, Filtro de Tipo e Modal de Preview da Peça)
   const [conteudoSearch, setConteudoSearch] = useState('');
@@ -616,15 +619,15 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
             {/* Linhas de Informações com Linha de Conexão Horizontal */}
             <div className="space-y-4 pt-1">
               
-              {/* Linha 1: Contato */}
+              {/* Linha 1: Nome */}
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium shrink-0">
                   <User size={15} className="text-slate-400" />
-                  <span>Contato</span>
+                  <span>Nome</span>
                 </div>
                 <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
                 <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right">
-                  {activeClient.contactName || 'Equipe de conteúdo'}
+                  {activeClient.contactName || activeClient.name || 'Equipe de conteúdo'}
                 </span>
               </div>
 
@@ -679,65 +682,39 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
               {/* Linha 4: Valor do serviço contratado */}
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium shrink-0">
-                  <Briefcase size={15} className="text-[#ff9900]" />
+                  <Briefcase size={15} className="text-slate-400" />
                   <span>Valor do serviço contratado</span>
                 </div>
                 <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
                 <span 
                   className="font-black text-slate-900 dark:text-white shrink-0 text-right font-mono flex items-center gap-1.5"
-                  title="Valor do serviço contratado pelo cliente"
+                  title="Valor do serviço contratado fixado pela agência em contrato (edição não permitida para o cliente)"
                 >
-                  {isEditingContractValue ? (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="text-xs font-bold text-slate-400">R$</span>
-                      <input
-                        type="text"
-                        autoFocus
-                        value={tempContractValue}
-                        onChange={(e) => setTempContractValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveContractValue();
-                          if (e.key === 'Escape') setIsEditingContractValue(false);
-                        }}
-                        className="w-24 px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-slate-800 border border-[#ff9900] rounded-md text-slate-900 dark:text-white focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveContractValue}
-                        className="p-1 rounded bg-[#ff9900] text-[#142142] hover:bg-[#ff9900]/90 text-[10px] font-bold cursor-pointer"
-                        title="Salvar valor"
-                      >
-                        <Check size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingContractValue(false)}
-                        className="p-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 text-[10px] cursor-pointer"
-                        title="Cancelar"
-                      >
-                        <X size={11} />
-                      </button>
-                    </span>
-                  ) : (
-                    <>
-                      <span>
-                        R$ {contractedServiceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                      {onUpdateClient && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTempContractValue(contractedServiceValue.toString());
-                            setIsEditingContractValue(true);
-                          }}
-                          className="opacity-60 hover:opacity-100 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-[#ff9900] transition-all cursor-pointer"
-                          title="Editar valor do serviço contratado"
-                        >
-                          <Edit3 size={12} />
-                        </button>
-                      )}
-                    </>
-                  )}
+                  <span>
+                    R$ {contractedServiceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span 
+                    className="p-1 rounded-md text-slate-400 dark:text-slate-500 inline-flex items-center justify-center cursor-default"
+                    title="Valor contratado fixado pela agência (edição bloqueada)"
+                  >
+                    <Lock size={12} className="text-slate-400 dark:text-slate-500" />
+                  </span>
+                </span>
+              </div>
+
+              {/* Linha 5: Cliente desde */}
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium shrink-0">
+                  <Calendar size={15} className="text-slate-400" />
+                  <span>Cliente desde</span>
+                </div>
+                <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
+                <span 
+                  className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono flex items-center gap-1.5"
+                  title="Data de início da parceria com a agência"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span>{formattedJoinedDate}</span>
                 </span>
               </div>
 

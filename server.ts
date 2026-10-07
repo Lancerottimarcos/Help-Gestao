@@ -16,12 +16,15 @@ const FIREBASE_CONFIG_FILE = path.join(process.cwd(), "firebase-applet-config.js
 const FIRESTORE_STATUS_FILE = path.join(DATA_DIR, "firestore-status.json");
 
 let firestoreDb: any = null;
+let isMemoryQuotaExhausted = true; // Mantém ativo o modo local resiliente para evitar loops de estouro de cota diária do Firestore
 
 function isFirestoreQuotaExhausted(): boolean {
+  if (isMemoryQuotaExhausted) return true;
   try {
     if (fs.existsSync(FIRESTORE_STATUS_FILE)) {
       const data = JSON.parse(fs.readFileSync(FIRESTORE_STATUS_FILE, "utf-8"));
       if (data && data.quotaExhausted) {
+        isMemoryQuotaExhausted = true;
         return true;
       }
     }
@@ -30,6 +33,7 @@ function isFirestoreQuotaExhausted(): boolean {
 }
 
 async function markFirestoreQuotaExhausted() {
+  isMemoryQuotaExhausted = true;
   try {
     fs.writeFileSync(
       FIRESTORE_STATUS_FILE,
@@ -50,7 +54,6 @@ async function markFirestoreQuotaExhausted() {
     `[Firestore Server] Cota diária gratuita do Firestore atingida (${new Date().toISOString()}). Encerrando streams do Firestore e operando em modo local resiliente via data/database.json.`
   );
 
-  // Termina a instância para fechar quaisquer streams gRPC pendentes e cancelar retentativas
   if (firestoreDb) {
     const dbToClose = firestoreDb;
     firestoreDb = null;
@@ -99,7 +102,6 @@ async function startServer() {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("X-XSS-Protection", "1; mode=block");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     next();
   });
 
@@ -293,7 +295,7 @@ async function startServer() {
           const msg = fErr?.message || "";
           const code = fErr?.code || "";
           if (code === "resource-exhausted" || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota limit exceeded") || msg.includes("Quota")) {
-            markFirestoreQuotaExhausted();
+            await markFirestoreQuotaExhausted();
           } else {
             console.warn("[Firestore Server] Aviso ao persistir no Firestore:", fErr);
           }

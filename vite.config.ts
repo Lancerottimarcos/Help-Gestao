@@ -243,53 +243,9 @@ function databaseApiPlugin(): Plugin {
   };
 }
 
-function httpsHstsPlugin(): Plugin {
-  return {
-    name: 'https-hsts-protocol',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        // Enforce HSTS (HTTP Strict Transport Security - RFC 6797)
-        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-
-        const proto = req.headers['x-forwarded-proto'];
-        const host = req.headers['host'];
-        // If forwarded protocol is HTTP and not localhost, send 301 Permanent Redirect to HTTPS
-        if (proto === 'http' && host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-          res.writeHead(301, {
-            Location: `https://${host}${req.url || '/'}`,
-            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
-          });
-          res.end();
-          return;
-        }
-        next();
-      });
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use((req, res, next) => {
-        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        const proto = req.headers['x-forwarded-proto'];
-        const host = req.headers['host'];
-        if (proto === 'http' && host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-          res.writeHead(301, {
-            Location: `https://${host}${req.url || '/'}`,
-            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
-          });
-          res.end();
-          return;
-        }
-        next();
-      });
-    }
-  };
-}
-
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), httpsHstsPlugin(), supabaseConfigApiPlugin(), databaseApiPlugin()],
+    plugins: [react(), tailwindcss(), supabaseConfigApiPlugin(), databaseApiPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -297,7 +253,7 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},

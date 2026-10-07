@@ -135,6 +135,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [newClientState, setNewClientState] = useState('');
 
   // Mantidos
+  const [newClientJoinedDate, setNewClientJoinedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [newClientBirthDate, setNewClientBirthDate] = useState('');
   const [newClientCoverColor, setNewClientCoverColor] = useState('#142142');
   
@@ -167,6 +168,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [editCity, setEditCity] = useState('');
   const [editState, setEditState] = useState('');
   const [editBirthDate, setEditBirthDate] = useState('');
+  const [editJoinedDate, setEditJoinedDate] = useState('');
   const [editCoverColor, setEditCoverColor] = useState('#142142');
   const [editStatus, setEditStatus] = useState<'Ativo' | 'Pausado' | 'Cancelado' | 'Em Onboarding'>('Ativo');
   const [editMonthlyFee, setEditMonthlyFee] = useState(0);
@@ -180,11 +182,57 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [editServices, setEditServices] = useState<string[]>([]);
   const [editCustomServiceInput, setEditCustomServiceInput] = useState('');
 
-  const allAvailableServices = useMemo(() => {
-    const registered = (services || []).map((s) => s.title || s.name || '').filter(Boolean);
-    const fromClients = clients.flatMap((c) => c.services || []).filter(Boolean);
-    return Array.from(new Set([...registered, ...defaultAgencyServices, ...fromClients]));
-  }, [services, clients, defaultAgencyServices]);
+  // Somente os serviços oficialmente cadastrados no sistema (gestão de serviços)
+  const registeredSystemServices = useMemo(() => {
+    return Array.from(
+      new Set(
+        (services || [])
+          .map((s) => (s.title || s.name || '').trim())
+          .filter(Boolean)
+      )
+    );
+  }, [services]);
+
+  const allAvailableServices = registeredSystemServices;
+
+  // Soma automática dos valores base dos serviços selecionados no cliente em edição
+  const calculatedEditServicesTotal = useMemo(() => {
+    return editServices.reduce((sum, srvTitle) => {
+      const matched = services?.find(
+        (s) => (s.title || s.name || '').trim().toLowerCase() === srvTitle.trim().toLowerCase()
+      );
+      return sum + (matched?.basePrice ?? matched?.price ?? 0);
+    }, 0);
+  }, [editServices, services]);
+
+  // Soma automática dos valores base dos serviços selecionados no novo cliente
+  const calculatedNewServicesTotal = useMemo(() => {
+    return newClientServices.reduce((sum, srvTitle) => {
+      const matched = services?.find(
+        (s) => (s.title || s.name || '').trim().toLowerCase() === srvTitle.trim().toLowerCase()
+      );
+      return sum + (matched?.basePrice ?? matched?.price ?? 0);
+    }, 0);
+  }, [newClientServices, services]);
+
+  // Atualiza serviços selecionados e sincroniza automaticamente a soma total dos serviços contratados
+  const updateEditServices = (newServices: string[]) => {
+    setEditServices(newServices);
+    const sum = newServices.reduce((acc, s) => {
+      const match = services?.find(m => (m.title || m.name || '').trim().toLowerCase() === s.trim().toLowerCase());
+      return acc + (match?.basePrice ?? match?.price ?? 0);
+    }, 0);
+    setEditMonthlyFee(sum);
+  };
+
+  const updateNewClientServices = (newServices: string[]) => {
+    setNewClientServices(newServices);
+    const sum = newServices.reduce((acc, s) => {
+      const match = services?.find(m => (m.title || m.name || '').trim().toLowerCase() === s.trim().toLowerCase());
+      return acc + (match?.basePrice ?? match?.price ?? 0);
+    }, 0);
+    setNewClientMonthlyFee(sum);
+  };
 
   // Helper for avatar file upload
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
@@ -249,7 +297,12 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
     setEditEmails(client.emails && client.emails.length > 0 ? [...client.emails] : [client.email || '']);
     setEditPhones(client.phones && client.phones.length > 0 ? [...client.phones] : [client.phone || '']);
     setEditSegment(client.segment);
-    setEditServices(Array.isArray(client.services) && client.services.length > 0 ? [...client.services] : []);
+    const clientServicesList = Array.isArray(client.services) && client.services.length > 0 ? [...client.services] : [];
+    setEditServices(clientServicesList);
+    const sumCalculated = clientServicesList.reduce((acc, s) => {
+      const match = services?.find(m => (m.title || m.name || '').trim().toLowerCase() === s.trim().toLowerCase());
+      return acc + (match?.basePrice ?? match?.price ?? 0);
+    }, 0);
     setEditCustomServiceInput('');
     setEditCep(client.cep || '');
     setEditStreet(client.street || '');
@@ -259,9 +312,10 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
     setEditCity(client.city || '');
     setEditState(client.state || '');
     setEditBirthDate(client.birthDate || '');
+    setEditJoinedDate(client.joinedDate ? (client.joinedDate.includes('T') ? client.joinedDate.split('T')[0] : client.joinedDate) : '');
     setEditCoverColor(client.coverColor || '#142142');
     setEditStatus(client.status);
-    setEditMonthlyFee(client.monthlyFee || 0);
+    setEditMonthlyFee(client.monthlyFee > 0 ? client.monthlyFee : (sumCalculated > 0 ? sumCalculated : 0));
     setEditAvatar(client.avatar || '');
     setEditAvatarUrlInput('');
     setEditPortalUser(client.portalUsername || client.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
@@ -315,6 +369,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
       city: editCity.trim() || undefined,
       state: editState.trim() || undefined,
       address: formattedAddress,
+      joinedDate: editJoinedDate ? editJoinedDate : (editingClient.joinedDate || undefined),
       birthDate: editBirthDate || undefined,
       coverColor: editCoverColor,
       avatar: editAvatar.trim() || editingClient.avatar || 'https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=120&auto=format&fit=crop&q=80',
@@ -376,7 +431,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
       monthlyFee: newClientMonthlyFee || 0,
       services: newClientServices.length > 0 ? newClientServices : ['Gestão de Redes Sociais'],
       activeDemandsCount: 0,
-      joinedDate: new Date().toISOString().split('T')[0],
+      joinedDate: newClientJoinedDate || new Date().toISOString().split('T')[0],
     };
 
     onAddClient(newClient);
@@ -389,6 +444,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
     setNewClientEmails(['']);
     setNewClientPhones(['']);
     setNewClientSegment('');
+    setNewClientJoinedDate(new Date().toISOString().split('T')[0]);
     setNewClientServices(['Gestão de Redes Sociais', 'Tráfego Pago']);
     setNewCustomServiceInput('');
     setNewClientMonthlyFee(2500);
@@ -706,6 +762,12 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                   <Phone size={13} className="text-slate-400 dark:text-slate-500 shrink-0" />
                   <span className="font-mono">{client.phone}</span>
                 </div>
+                {client.joinedDate && (
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                    <Clock size={13} className="text-emerald-500 shrink-0" />
+                    <span>Cliente desde: <strong className="font-mono font-semibold">{new Date(client.joinedDate.includes('T') ? client.joinedDate : `${client.joinedDate}T00:00:00`).toLocaleDateString('pt-BR')}</strong></span>
+                  </div>
+                )}
                 {client.birthDate && (
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
                     <Calendar size={13} className="text-[#fab518] shrink-0" />
@@ -1115,7 +1177,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                         <span>{srv}</span>
                         <button
                           type="button"
-                          onClick={() => setNewClientServices(newClientServices.filter((_, i) => i !== idx))}
+                          onClick={() => updateNewClientServices(newClientServices.filter((_, i) => i !== idx))}
                           className="ml-1 text-slate-300 hover:text-rose-400 cursor-pointer p-0.5 transition-colors"
                           title={`Remover serviço ${srv}`}
                           aria-label={`Remover ${srv}`}
@@ -1145,21 +1207,33 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                       onChange={(e) => {
                         const val = e.target.value.trim();
                         if (val && !newClientServices.includes(val)) {
-                          setNewClientServices([...newClientServices, val]);
+                          updateNewClientServices([...newClientServices, val]);
                         }
                       }}
                       className="w-full bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all cursor-pointer font-medium"
                     >
-                      <option value="">+ Selecionar um serviço...</option>
-                      {allAvailableServices.map((srv, idx) => (
-                        <option
-                          key={idx}
-                          value={srv}
-                          disabled={newClientServices.includes(srv)}
-                        >
-                          {newClientServices.includes(srv) ? `✓ ${srv} (Contratado)` : srv}
-                        </option>
-                      ))}
+                      <option value="">
+                        {allAvailableServices.length > 0 
+                          ? '+ Selecionar serviço cadastrado...' 
+                          : 'Nenhum serviço cadastrado no sistema'}
+                      </option>
+                      {allAvailableServices.map((srv, idx) => {
+                        const matchedObj = services?.find(
+                          (s) => (s.title || s.name || '').trim().toLowerCase() === srv.toLowerCase()
+                        );
+                        const priceStr = matchedObj && (matchedObj.basePrice || matchedObj.price)
+                          ? ` (R$ ${(matchedObj.basePrice || matchedObj.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`
+                          : '';
+                        return (
+                          <option
+                            key={idx}
+                            value={srv}
+                            disabled={newClientServices.includes(srv)}
+                          >
+                            {newClientServices.includes(srv) ? `✓ ${srv} (Já selecionado)` : `${srv}${priceStr}`}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -1178,7 +1252,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                             e.preventDefault();
                             const val = newCustomServiceInput.trim();
                             if (val && !newClientServices.includes(val)) {
-                              setNewClientServices([...newClientServices, val]);
+                              updateNewClientServices([...newClientServices, val]);
                               setNewCustomServiceInput('');
                             }
                           }
@@ -1191,7 +1265,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                         onClick={() => {
                           const val = newCustomServiceInput.trim();
                           if (val && !newClientServices.includes(val)) {
-                            setNewClientServices([...newClientServices, val]);
+                            updateNewClientServices([...newClientServices, val]);
                             setNewCustomServiceInput('');
                           }
                         }}
@@ -1220,9 +1294,9 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                           type="button"
                           onClick={() => {
                             if (isSelected) {
-                              setNewClientServices(newClientServices.filter((s) => s !== srv));
+                              updateNewClientServices(newClientServices.filter((s) => s !== srv));
                             } else {
-                              setNewClientServices([...newClientServices, srv]);
+                              updateNewClientServices([...newClientServices, srv]);
                             }
                           }}
                           className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1239,26 +1313,36 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Campo: Valor do Serviço Contratado / Mensalidade */}
-                <div className="pt-3 border-t border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                {/* Campo: Valor Total dos Serviços Contratados */}
+                <div className="pt-3 border-t border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-[#142142] dark:text-white">
-                      Valor do Serviço Contratado / Mensalidade (R$)
-                    </label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <label className="block text-[11px] font-bold text-[#142142] dark:text-white">
+                        Valor Total dos Serviços Contratados (R$)
+                      </label>
+                      {calculatedNewServicesTotal > 0 && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                          Total: R$ {calculatedNewServicesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Valor cobrado mensalmente ou pacote do cliente
+                      {calculatedNewServicesTotal > 0
+                        ? `Soma automática calculada dos ${newClientServices.length} serviço(s) selecionado(s)`
+                        : 'Soma total dos serviços contratados pelo cliente no mês'}
                     </span>
                   </div>
-                  <div className="relative w-full sm:w-48">
+                  <div className="relative w-full sm:w-52">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
                       R$
                     </span>
                     <input
+                      id="input-new-client-monthly-fee"
                       type="number"
                       min="0"
                       step="50"
-                      placeholder="2500,00"
-                      value={newClientMonthlyFee || ''}
+                      placeholder="0,00"
+                      value={newClientMonthlyFee !== undefined && newClientMonthlyFee !== null ? newClientMonthlyFee : (calculatedNewServicesTotal || '')}
                       onChange={(e) => setNewClientMonthlyFee(parseFloat(e.target.value) || 0)}
                       className="w-full bg-white dark:bg-slate-900 text-xs font-mono font-bold text-[#142142] dark:text-white pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all"
                     />
@@ -1472,18 +1556,37 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                 </div>
               </div>
 
-              {/* Seção: Data de Nascimento (Mantido) */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <label className="block text-xs font-bold text-[#142142] dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
-                  <Calendar size={13} className="text-[#fab518]" />
-                  <span>Data de Nascimento</span>
-                </label>
-                <input
-                  type="date"
-                  value={newClientBirthDate}
-                  onChange={(e) => setNewClientBirthDate(e.target.value)}
-                  className="w-full sm:w-1/2 bg-[#F2F2F2] dark:bg-slate-800 text-sm text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-transparent focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
-                />
+              {/* Seção: Datas (Início de Contrato & Nascimento) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div>
+                  <label className="block text-xs font-bold text-[#142142] dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#fab518]" />
+                    <span>Data que virou cliente</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="input-new-client-joined-date"
+                    value={newClientJoinedDate}
+                    onChange={(e) => setNewClientJoinedDate(e.target.value)}
+                    className="w-full bg-[#F2F2F2] dark:bg-slate-800 text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-transparent focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all cursor-pointer"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Início da parceria ou assinatura do contrato</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#142142] dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#fab518]" />
+                    <span>Data de Nascimento</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="input-new-client-birth-date"
+                    value={newClientBirthDate}
+                    onChange={(e) => setNewClientBirthDate(e.target.value)}
+                    className="w-full bg-[#F2F2F2] dark:bg-slate-800 text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-transparent focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all cursor-pointer"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Para felicitações e lembretes da equipe</p>
+                </div>
               </div>
 
               {/* Seção: Cor da Capa do Cliente (Mantido) */}
@@ -1855,7 +1958,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                         <span>{srv}</span>
                         <button
                           type="button"
-                          onClick={() => setEditServices(editServices.filter((_, i) => i !== idx))}
+                          onClick={() => updateEditServices(editServices.filter((_, i) => i !== idx))}
                           className="ml-1 text-slate-300 hover:text-rose-400 cursor-pointer p-0.5 transition-colors"
                           title={`Remover serviço ${srv}`}
                           aria-label={`Remover ${srv}`}
@@ -1885,21 +1988,33 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                       onChange={(e) => {
                         const val = e.target.value.trim();
                         if (val && !editServices.includes(val)) {
-                          setEditServices([...editServices, val]);
+                          updateEditServices([...editServices, val]);
                         }
                       }}
                       className="w-full bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all cursor-pointer font-medium"
                     >
-                      <option value="">+ Selecionar um serviço...</option>
-                      {allAvailableServices.map((srv, idx) => (
-                        <option
-                          key={idx}
-                          value={srv}
-                          disabled={editServices.includes(srv)}
-                        >
-                          {editServices.includes(srv) ? `✓ ${srv} (Contratado)` : srv}
-                        </option>
-                      ))}
+                      <option value="">
+                        {allAvailableServices.length > 0 
+                          ? '+ Selecionar serviço cadastrado...' 
+                          : 'Nenhum serviço cadastrado no sistema'}
+                      </option>
+                      {allAvailableServices.map((srv, idx) => {
+                        const matchedObj = services?.find(
+                          (s) => (s.title || s.name || '').trim().toLowerCase() === srv.toLowerCase()
+                        );
+                        const priceStr = matchedObj && (matchedObj.basePrice || matchedObj.price)
+                          ? ` (R$ ${(matchedObj.basePrice || matchedObj.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`
+                          : '';
+                        return (
+                          <option
+                            key={idx}
+                            value={srv}
+                            disabled={editServices.includes(srv)}
+                          >
+                            {editServices.includes(srv) ? `✓ ${srv} (Já selecionado)` : `${srv}${priceStr}`}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -1918,7 +2033,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                             e.preventDefault();
                             const val = editCustomServiceInput.trim();
                             if (val && !editServices.includes(val)) {
-                              setEditServices([...editServices, val]);
+                              updateEditServices([...editServices, val]);
                               setEditCustomServiceInput('');
                             }
                           }
@@ -1931,7 +2046,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                         onClick={() => {
                           const val = editCustomServiceInput.trim();
                           if (val && !editServices.includes(val)) {
-                            setEditServices([...editServices, val]);
+                            updateEditServices([...editServices, val]);
                             setEditCustomServiceInput('');
                           }
                         }}
@@ -1960,9 +2075,9 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                           type="button"
                           onClick={() => {
                             if (isSelected) {
-                              setEditServices(editServices.filter((s) => s !== srv));
+                              updateEditServices(editServices.filter((s) => s !== srv));
                             } else {
-                              setEditServices([...editServices, srv]);
+                              updateEditServices([...editServices, srv]);
                             }
                           }}
                           className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1979,26 +2094,36 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Campo: Valor do Serviço Contratado / Mensalidade */}
-                <div className="pt-3 border-t border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                {/* Campo: Valor Total dos Serviços Contratados */}
+                <div className="pt-3 border-t border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-[#142142] dark:text-white">
-                      Valor do Serviço Contratado / Mensalidade (R$)
-                    </label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <label className="block text-[11px] font-bold text-[#142142] dark:text-white">
+                        Valor Total dos Serviços Contratados (R$)
+                      </label>
+                      {calculatedEditServicesTotal > 0 && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                          Total: R$ {calculatedEditServicesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Valor cobrado mensalmente ou pacote do cliente
+                      {calculatedEditServicesTotal > 0
+                        ? `Soma automática calculada dos ${editServices.length} serviço(s) selecionado(s)`
+                        : 'Soma total dos serviços contratados pelo cliente no mês'}
                     </span>
                   </div>
-                  <div className="relative w-full sm:w-48">
+                  <div className="relative w-full sm:w-52">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
                       R$
                     </span>
                     <input
+                      id="input-edit-client-monthly-fee"
                       type="number"
                       min="0"
                       step="50"
                       placeholder="0,00"
-                      value={editMonthlyFee || ''}
+                      value={editMonthlyFee !== undefined && editMonthlyFee !== null ? editMonthlyFee : (calculatedEditServicesTotal || '')}
                       onChange={(e) => setEditMonthlyFee(parseFloat(e.target.value) || 0)}
                       className="w-full bg-white dark:bg-slate-900 text-xs font-mono font-bold text-[#142142] dark:text-white pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:outline-none transition-all"
                     />
@@ -2220,18 +2345,37 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                 </div>
               </div>
 
-              {/* Data de Nascimento (Mantido) */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <label className="block text-xs font-bold text-[#142142] dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
-                  <Calendar size={13} className="text-[#fab518]" />
-                  <span>Data de Nascimento</span>
-                </label>
-                <input
-                  type="date"
-                  value={editBirthDate}
-                  onChange={(e) => setEditBirthDate(e.target.value)}
-                  className="w-full sm:w-1/2 bg-[#F2F2F2] dark:bg-slate-800 text-sm text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-transparent focus:border-[#fab518] focus:outline-none transition-all"
-                />
+              {/* Seção: Datas (Data que virou cliente & Data de Nascimento) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div>
+                  <label className="block text-xs font-bold text-[#142142] dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#fab518]" />
+                    <span>Data que virou cliente</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="input-edit-client-joined-date"
+                    value={editJoinedDate}
+                    onChange={(e) => setEditJoinedDate(e.target.value)}
+                    className="w-full bg-[#F2F2F2] dark:bg-slate-800 text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-transparent focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all cursor-pointer"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Data de início da parceria / assinatura do contrato</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#142142] dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#fab518]" />
+                    <span>Data de Nascimento</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="input-edit-client-birth-date"
+                    value={editBirthDate}
+                    onChange={(e) => setEditBirthDate(e.target.value)}
+                    className="w-full bg-[#F2F2F2] dark:bg-slate-800 text-sm font-medium text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-transparent focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all cursor-pointer"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Para felicitações e lembretes da equipe</p>
+                </div>
               </div>
 
               {/* Cor da Capa do Cliente (Mantido) */}

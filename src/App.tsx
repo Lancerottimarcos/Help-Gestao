@@ -266,10 +266,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
   });
   const [kanbanFilterTrigger, setKanbanFilterTrigger] = useState<number>(0);
 
-  // Trava clientes exclusivamente no Portal do Cliente e na Central de Aprovações
+  // Trava clientes exclusivamente no Portal do Cliente
   useEffect(() => {
     if (effectiveUser.role === 'cliente') {
-      if (currentPage !== 'portal-cliente' && currentPage !== 'aprovacoes' && currentPage !== 'demandas') {
+      if (currentPage !== 'portal-cliente') {
         setCurrentPage('portal-cliente');
       }
       const clientName = effectiveUser.clientName || effectiveUser.name;
