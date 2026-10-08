@@ -176,6 +176,47 @@ function classifySyncError(
 
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingPayload: Partial<AppDatabasePayload> = {};
+let isSaving = false;
+let pendingPromiseResolvers: Array<(success: boolean) => void> = [];
+
+async function flushSaveQueue() {
+  if (isSaving) return;
+  if (Object.keys(pendingPayload).length === 0) return;
+
+  isSaving = true;
+  const payloadToSend = {
+    ...pendingPayload,
+    updatedAt: Date.now(),
+  };
+  pendingPayload = {};
+  const resolversToNotify = [...pendingPromiseResolvers];
+  pendingPromiseResolvers = [];
+
+  try {
+    const res = await fetch('/api/database', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payloadToSend),
+    }).catch((err) => {
+      console.warn('Erro ao salvar no servidor central:', err);
+      return null;
+    });
+
+    const ok = Boolean(res && res.ok);
+    resolversToNotify.forEach((r) => r(ok));
+  } catch (err) {
+    console.warn('Erro no flushSaveQueue da base de dados:', err);
+    resolversToNotify.forEach((r) => r(false));
+  } finally {
+    isSaving = false;
+    // Se novas alterações acumularam enquanto esta requisição trafegava, despacha imediatamente!
+    if (Object.keys(pendingPayload).length > 0) {
+      flushSaveQueue();
+    }
+  }
+}
 
 export const serverDbService = {
   /**
@@ -364,54 +405,44 @@ export const serverDbService = {
   },
 
   /**
-   * Salva os dados no servidor da aplicação e no Firestore de forma persistente (compartilhada entre navegadores e computadores)
-   * Utiliza debounce para evitar requisições em cascata.
+   * Salva os dados no servidor da aplicação de forma atômica e serializada
+   * Protege contra concorrência e condições de corrida entre demandas e clientes.
    */
   saveDatabase(payload: Partial<AppDatabasePayload>, immediate = false): Promise<boolean> {
     return new Promise((resolve) => {
       pendingPayload = { ...pendingPayload, ...payload };
+      pendingPromiseResolvers.push(resolve);
 
       if (saveTimeout) {
         clearTimeout(saveTimeout);
         saveTimeout = null;
       }
 
-      const executeSave = async () => {
-        try {
-          const bodyToSend = {
-            ...pendingPayload,
-            updatedAt: Date.now(),
-          };
-          pendingPayload = {};
-
-          // 1. Grava no servidor central (/api/database), que persiste no disco local e sincroniza no Firestore server-side
-          const res = await fetch('/api/database', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(bodyToSend),
-          }).catch((err) => {
-            console.warn('Erro ao salvar no servidor central:', err);
-            return null;
-          });
-
-          if (res && res.ok) {
-            resolve(true);
-            return;
-          }
-        } catch (err) {
-          console.warn('Erro no executeSave da base de dados:', err);
-        }
-        resolve(false);
-      };
-
       if (immediate) {
-        executeSave();
+        flushSaveQueue();
       } else {
-        saveTimeout = setTimeout(executeSave, 400);
+        saveTimeout = setTimeout(() => {
+          saveTimeout = null;
+          flushSaveQueue();
+        }, 300);
       }
     });
+  },
+
+  /**
+   * Endpoint de canal direto para persistir uma demanda ou lista de demandas
+   */
+  async saveDemandsDirectly(demands: DemandItem[]): Promise<boolean> {
+    try {
+      const res = await fetch('/api/demands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ demands }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   /**

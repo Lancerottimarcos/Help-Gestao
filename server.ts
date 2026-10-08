@@ -184,56 +184,46 @@ async function startServer() {
     }
   });
 
-  // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Cache em disco + Firestore)
-  app.get("/api/database", async (_req, res) => {
-    // 1. Prioriza sempre o arquivo local no disco se existir (altíssima velocidade, zero consumo de cota)
+  // In-Memory Database Cache & State Manager (protege contra race-conditions e garante persistência atômica)
+  let inMemoryDatabaseState: any = null;
+
+  function getDatabaseState(): any {
+    if (inMemoryDatabaseState !== null) return inMemoryDatabaseState;
     if (fs.existsSync(DB_FILE)) {
       try {
         const raw = fs.readFileSync(DB_FILE, "utf-8");
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
-          return res.json({
-            success: true,
-            data: parsed,
-            timestamp: Date.now(),
-          });
-        }
+        inMemoryDatabaseState = JSON.parse(raw);
+        return inMemoryDatabaseState;
       } catch (e: any) {
         console.error("Erro ao ler data/database.json:", e);
       }
     }
+    inMemoryDatabaseState = {};
+    return inMemoryDatabaseState;
+  }
 
-    // 2. Se o arquivo não existir e o Firestore não estiver com cota esgotada, tenta carregar da nuvem
-    if (firestoreDb && !isFirestoreQuotaExhausted()) {
+  function persistDatabaseState(state: any) {
+    inMemoryDatabaseState = state;
+    try {
+      // Gravação atômica segura via arquivo temporário
+      const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
+      fs.writeFileSync(tempFile, JSON.stringify(state, null, 2), "utf-8");
+      fs.renameSync(tempFile, DB_FILE);
+    } catch {
       try {
-        const docRef = doc(firestoreDb, "agency_data", "main_state");
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          const cloudData = snap.data();
-          // Atualiza cache local no disco
-          try {
-            fs.writeFileSync(DB_FILE, JSON.stringify(cloudData, null, 2), "utf-8");
-          } catch {}
-          return res.json({
-            success: true,
-            data: cloudData,
-            timestamp: Date.now(),
-          });
-        }
-      } catch (err: any) {
-        const msg = err?.message || "";
-        const code = err?.code || "";
-        if (code === "resource-exhausted" || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota limit exceeded") || msg.includes("Quota")) {
-          markFirestoreQuotaExhausted();
-        } else {
-          console.warn("[Firestore Server] Aviso ao consultar Firestore:", err);
-        }
+        fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf-8");
+      } catch (e) {
+        console.error("Erro fatal ao salvar data/database.json:", e);
       }
     }
+  }
 
-    res.json({
+  // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Cache em disco + Firestore)
+  app.get("/api/database", async (_req, res) => {
+    const data = getDatabaseState();
+    return res.json({
       success: true,
-      data: null,
+      data,
       timestamp: Date.now(),
     });
   });
@@ -262,13 +252,8 @@ async function startServer() {
         "collaboratorRules",
       ];
 
-      // Mescla com os dados existentes se houver
-      let currentData: any = {};
-      if (fs.existsSync(DB_FILE)) {
-        try {
-          currentData = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
-        } catch {}
-      }
+      // Mescla com os dados em memória existentes (imutável e livre de corrida de I/O)
+      const currentData = getDatabaseState();
 
       const sanitizedUpdate: Record<string, any> = {};
       for (const key of Object.keys(body)) {
@@ -284,7 +269,7 @@ async function startServer() {
       };
 
       // 1. Grava no cache de arquivo local (primário, resiliente e sem limites de cota)
-      fs.writeFileSync(DB_FILE, JSON.stringify(merged, null, 2), "utf-8");
+      persistDatabaseState(merged);
 
       // 2. Grava de forma secundária no Google Cloud Firestore se houver cota disponível
       if (firestoreDb && !isFirestoreQuotaExhausted()) {
@@ -306,6 +291,45 @@ async function startServer() {
     } catch (e: any) {
       console.error("Erro ao salvar data/database.json:", e);
       res.status(500).json({ success: false, error: "Erro ao persistir dados no banco central." });
+    }
+  });
+
+  // Endpoints dedicados e otimizados para Demandas (Kanban)
+  app.get("/api/demands", (_req, res) => {
+    const db = getDatabaseState();
+    const demands = Array.isArray(db.demands) ? db.demands : [];
+    res.json({ success: true, data: demands, count: demands.length });
+  });
+
+  app.post("/api/demands", (req, res) => {
+    try {
+      const { demand, demands } = req.body || {};
+      const current = getDatabaseState();
+      let currentDemands: any[] = Array.isArray(current.demands) ? [...current.demands] : [];
+
+      if (Array.isArray(demands)) {
+        currentDemands = demands;
+      } else if (demand && demand.id) {
+        const idx = currentDemands.findIndex((d: any) => d.id === demand.id);
+        if (idx >= 0) {
+          currentDemands[idx] = demand;
+        } else {
+          currentDemands.unshift(demand);
+        }
+      } else {
+        return res.status(400).json({ success: false, error: "Demanda ou lista de demandas inválida." });
+      }
+
+      const updated = {
+        ...current,
+        demands: currentDemands,
+        updatedAt: Date.now(),
+      };
+      persistDatabaseState(updated);
+      res.json({ success: true, count: currentDemands.length });
+    } catch (e: any) {
+      console.error("Erro ao salvar demanda(s):", e);
+      res.status(500).json({ success: false, error: "Falha ao gravar demanda." });
     }
   });
 

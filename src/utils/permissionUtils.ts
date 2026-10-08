@@ -205,9 +205,9 @@ export function getEffectivePermissions(
 export function canAccessPage(page: PageId, userOrMember?: UserProfile | TeamMember | null): boolean {
   if (!userOrMember) return false;
 
-  // Clientes autenticados têm acesso total e liberado ao seu "Meu Portal" (portal-cliente), à Central de Aprovações e Demandas
+  // Clientes autenticados têm acesso total e liberado ao seu "Meu Portal" (portal-cliente) e Demandas
   if ((userOrMember as UserProfile).role === 'cliente') {
-    return page === 'portal-cliente' || page === 'aprovacoes' || page === 'demandas';
+    return page === 'portal-cliente' || page === 'demandas';
   }
 
   // Início, demandas operacionais, datas comemorativas, APIs, Produção, Comunicação, Agenda, Gestão e Portal do Cliente são acessíveis para equipe da agência
