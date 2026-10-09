@@ -390,6 +390,35 @@ export function Layout({ children, onLogout }: LayoutProps) {
     } catch {}
   };
 
+  const getDeletedServiceIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('agency_deleted_service_ids');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Set(parsed);
+      }
+    } catch {}
+    return new Set();
+  };
+
+  const addDeletedServiceId = (id: string) => {
+    try {
+      const set = getDeletedServiceIds();
+      set.add(id);
+      localStorage.setItem('agency_deleted_service_ids', JSON.stringify(Array.from(set)));
+    } catch {}
+  };
+
+  const removeDeletedServiceId = (id: string) => {
+    try {
+      const set = getDeletedServiceIds();
+      if (set.has(id)) {
+        set.delete(id);
+        localStorage.setItem('agency_deleted_service_ids', JSON.stringify(Array.from(set)));
+      }
+    } catch {}
+  };
+
   // Sincronização robusta contínua com o Supabase (PostgreSQL Nuvem Principal)
   const [isSupabaseOnline, setIsSupabaseOnline] = useState(true);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
@@ -483,10 +512,20 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
       // Se o Supabase tiver serviços cadastrados
       if (remoteServices && Array.isArray(remoteServices) && remoteServices.length > 0) {
-        setServices(remoteServices);
-        try {
-          localStorage.setItem('agency_services', JSON.stringify(remoteServices));
-        } catch {}
+        const deletedServiceIds = getDeletedServiceIds();
+        const cleanRemote = remoteServices.filter((s) => !deletedServiceIds.has(s.id));
+        setServices((prevLocal) => {
+          const cleanLocal = prevLocal.filter((s) => !deletedServiceIds.has(s.id));
+          const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
+          const localPending = cleanLocal.filter((s) => !remoteMap.has(s.id));
+          const merged = [...cleanRemote, ...localPending];
+
+          try {
+            localStorage.setItem('agency_services', JSON.stringify(merged));
+          } catch {}
+          serverDbService.saveDatabase({ services: merged });
+          return merged;
+        });
       }
 
       // Se o Supabase tiver propostas orçamentárias
@@ -713,10 +752,31 @@ export function Layout({ children, onLogout }: LayoutProps) {
         }
 
         if (remoteData.services && Array.isArray(remoteData.services)) {
-          setServices(remoteData.services);
-          try {
-            localStorage.setItem('agency_services', JSON.stringify(remoteData.services));
-          } catch {}
+          const deletedServiceIds = getDeletedServiceIds();
+          const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
+
+          setServices((prev) => {
+            const cleanPrev = prev.filter((s) => !deletedServiceIds.has(s.id));
+            const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
+            const localPending = cleanPrev.filter((s) => !remoteMap.has(s.id));
+            const merged = [...cleanRemote, ...localPending];
+
+            if (localPending.length > 0) {
+              serverDbService.saveDatabase({ services: merged });
+            }
+
+            if (
+              cleanPrev.length === merged.length &&
+              cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.title === merged[idx]?.title && p.basePrice === merged[idx]?.basePrice)
+            ) {
+              return prev;
+            }
+
+            try {
+              localStorage.setItem('agency_services', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
 
         if (remoteData.proposals && Array.isArray(remoteData.proposals)) {
@@ -968,15 +1028,26 @@ export function Layout({ children, onLogout }: LayoutProps) {
           }
 
           // 6. SERVIÇOS
+          const deletedServiceIds = getDeletedServiceIds();
+          const cleanLocalServices = localServices.filter((s) => !deletedServiceIds.has(s.id));
           if (remoteData.services && Array.isArray(remoteData.services)) {
-            setServices(remoteData.services);
+            const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
+            const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
+            const localPending = cleanLocalServices.filter((s) => !remoteMap.has(s.id));
+            const merged = [...cleanRemote, ...localPending];
+
+            setServices(merged);
             try {
-              localStorage.setItem('agency_services', JSON.stringify(remoteData.services));
+              localStorage.setItem('agency_services', JSON.stringify(merged));
             } catch {}
-          } else if (localServices.length > 0) {
-            setServices(localServices);
+            if (localPending.length > 0) {
+              needsServerPush = true;
+              pushPayload.services = merged;
+            }
+          } else if (cleanLocalServices.length > 0) {
+            setServices(cleanLocalServices);
             needsServerPush = true;
-            pushPayload.services = localServices;
+            pushPayload.services = cleanLocalServices;
           }
 
           // 7. FATURAS (INVOICES)
@@ -1495,14 +1566,19 @@ export function Layout({ children, onLogout }: LayoutProps) {
     removeDeletedDemandId(newDemand.id);
     lastLocalDemandUpdateRef.current = Date.now();
 
+    let nextDemands: DemandItem[] = [];
     setDemands((prev) => {
       const updated = [newDemand, ...prev.filter((d) => d.id !== newDemand.id)];
+      nextDemands = updated;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
       serverDbService.saveDatabase({ demands: updated }, true);
       return updated;
     });
+
+    const demandsToSave = nextDemands.length > 0 ? nextDemands : [newDemand, ...demands.filter(d => d.id !== newDemand.id)];
+    serverDbService.saveDatabase({ demands: demandsToSave }, true);
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
@@ -1904,9 +1980,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updated));
       } catch {}
+      serverDbService.saveDatabase({ clients: updated }, true);
       return updated;
     });
-    const clientsToSave = updatedClients.length > 0 ? updatedClients : [newClient, ...clients];
+    const clientsToSave = updatedClients.length > 0 ? updatedClients : [newClient, ...clients.filter(c => c.id !== newClient.id)];
     serverDbService.saveDatabase({ clients: clientsToSave }, true);
     supabaseService.upsertClient(newClient);
   };
@@ -2023,23 +2100,56 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const handleAddService = (newService: Service) => {
-    setServices((prev) => [newService, ...prev]);
+    removeDeletedServiceId(newService.id);
+    let updatedServices: Service[] = [];
+    setServices((prev) => {
+      const updated = [newService, ...prev.filter((s) => s.id !== newService.id)];
+      updatedServices = updated;
+      try {
+        localStorage.setItem('agency_services', JSON.stringify(updated));
+      } catch {}
+      serverDbService.saveDatabase({ services: updated }, true);
+      return updated;
+    });
+    const servicesToSave = updatedServices.length > 0 ? updatedServices : [newService, ...services.filter(s => s.id !== newService.id)];
+    serverDbService.saveDatabase({ services: servicesToSave }, true);
     if (supabaseService.isConfigured()) {
       supabaseService.upsertService(newService);
     }
   };
 
   const handleUpdateService = (updatedService: Service) => {
-    setServices((prev) =>
-      prev.map((s) => (s.id === updatedService.id ? updatedService : s))
-    );
+    let updatedServices: Service[] = [];
+    setServices((prev) => {
+      const updated = prev.map((s) => (s.id === updatedService.id ? updatedService : s));
+      updatedServices = updated;
+      try {
+        localStorage.setItem('agency_services', JSON.stringify(updated));
+      } catch {}
+      serverDbService.saveDatabase({ services: updated }, true);
+      return updated;
+    });
+    const servicesToSave = updatedServices.length > 0 ? updatedServices : services.map((s) => (s.id === updatedService.id ? updatedService : s));
+    serverDbService.saveDatabase({ services: servicesToSave }, true);
     if (supabaseService.isConfigured()) {
       supabaseService.upsertService(updatedService);
     }
   };
 
   const handleDeleteService = (serviceId: string) => {
-    setServices((prev) => prev.filter((s) => s.id !== serviceId));
+    addDeletedServiceId(serviceId);
+    let updatedServices: Service[] = [];
+    setServices((prev) => {
+      const updated = prev.filter((s) => s.id !== serviceId);
+      updatedServices = updated;
+      try {
+        localStorage.setItem('agency_services', JSON.stringify(updated));
+      } catch {}
+      serverDbService.saveDatabase({ services: updated }, true);
+      return updated;
+    });
+    const servicesToSave = updatedServices.length > 0 ? updatedServices : services.filter(s => s.id !== serviceId);
+    serverDbService.saveDatabase({ services: servicesToSave }, true);
     if (supabaseService.isConfigured()) {
       supabaseService.deleteService(serviceId);
     }
@@ -2314,6 +2424,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
               setCurrentPage('demandas');
             }}
             onOpenNewDemandForClient={(clientName) => {
+              setNewDemandInitialData({ client: clientName });
               setIsNewDemandModalOpen(true);
             }}
           />
