@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { DemandItem, Client } from '../types';
 import { detectAndSanitizeInput } from '../utils/securityProtocols';
+import { FlamengoMockupCard } from './FlamengoMockupCard';
 
 interface PublicClientApprovalViewProps {
   demandId: string;
@@ -267,12 +268,14 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
                 </>
               )}
 
-              {/* Imagem do Post ou Ilustração Mockup */}
+              {/* Imagem do Post ou Ilustração Mockup Fiel ao Exemplo */}
               <div 
-                className="w-full h-full relative cursor-pointer flex flex-col justify-between p-6 sm:p-7 text-center overflow-hidden"
+                className="w-full h-full relative cursor-pointer overflow-hidden"
                 onClick={totalSlides > 1 ? handleNextSlide : undefined}
               >
-                {currentMedia?.url ? (
+                {activeMediaIndex === 0 && (demand.title.toLowerCase().includes('flamengo') || !currentMedia?.url) ? (
+                  <FlamengoMockupCard />
+                ) : currentMedia?.url ? (
                   <img
                     src={currentMedia.url}
                     alt={demand.title}
@@ -306,7 +309,7 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
                     onClick={() => setActiveMediaIndex(idx)}
                     className={`h-1.5 rounded-full transition-all cursor-pointer ${
                       activeMediaIndex === idx 
-                        ? 'w-6 bg-[#ff9900]' 
+                        ? 'w-6 bg-[#f97316]' 
                         : 'w-1.5 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
                     }`}
                   />
@@ -323,10 +326,10 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
             {/* 1. Meta Row: [PP] Portal Publicitário • [Icon] Feed • 12/10 às 18:00 */}
             <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
               {/* Badge Circular Laranja do Cliente */}
-              <div className="w-7 h-7 rounded-full bg-[#ff9900] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              <div className="w-7 h-7 rounded-full bg-[#f97316] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
                 {clientInitials}
               </div>
-              <span className="font-bold text-slate-900 dark:text-white text-sm">
+              <span className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
                 {clientName}
               </span>
               <span className="text-slate-400">·</span>
@@ -341,7 +344,7 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
             </div>
 
             {/* 2. Título do Post (Flamengo: camisa feita pelo público) */}
-            <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-black text-slate-900 dark:text-white tracking-tight leading-snug">
+            <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-normal text-slate-900 dark:text-white tracking-tight leading-snug">
               {demand.title}
             </h1>
 
@@ -353,26 +356,39 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
             {/* 4. Status Capsule: [Relógio] Aguardando sua aprovação */}
             <div>
               {isApproved ? (
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-600 text-white text-xs font-semibold shadow-xs">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-600 text-white text-xs sm:text-sm font-medium shadow-xs">
                   <CheckCircle2 size={14} className="stroke-[2.5]" />
                   <span>Aprovado para agendamento</span>
                 </div>
               ) : demand.approvalStatus === 'alteracao_solicitada' ? (
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-xs">
-                  <Edit3 size={14} className="stroke-[2.5]" />
-                  <span>Ajustes solicitados à agência</span>
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500 text-white text-xs sm:text-sm font-medium shadow-xs">
+                    <Edit3 size={14} className="stroke-[2.5]" />
+                    <span>Ajustes solicitados à agência</span>
+                  </div>
+                  {demand.approvalFeedback && (
+                    <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 text-amber-900 dark:text-amber-100 text-xs sm:text-sm font-medium shadow-2xs">
+                      <span className="font-bold block text-[11px] text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                        <MessageSquare size={13} className="text-amber-600 dark:text-amber-400" />
+                        <span>O que foi solicitado para ajustar:</span>
+                      </span>
+                      <p className="italic font-bold text-slate-900 dark:text-slate-100 leading-relaxed">
+                        “{demand.approvalFeedback}”
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#8E99A8] text-white text-xs font-semibold shadow-xs">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#8E99A8] text-white text-xs sm:text-sm font-medium shadow-xs">
                   <Clock size={14} className="stroke-[2.5]" />
                   <span>Aguardando sua aprovação</span>
                 </div>
               )}
             </div>
 
-            {/* 5. Caixa de Comentário para a Agência (bbbbb.png) */}
-            <div className="bg-white dark:bg-[#121827] rounded-[24px] p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-[#ff9900]/40 transition-all">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-400 mb-2">
+            {/* 5. Caixa de Comentário para a Agência (exemplo.png) */}
+            <div className="bg-white dark:bg-[#121827] rounded-[24px] p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-[#f97316]/30 transition-all">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
                 <MessageSquare size={14} className="text-slate-500" />
                 <span>Comentário para a agência</span>
               </div>
@@ -381,16 +397,16 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Amei! Ficou excelente... Ou escreva instruções de alteração"
                 rows={2}
-                className="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none font-normal leading-relaxed"
+                className="w-full bg-transparent text-sm sm:text-base text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none font-normal leading-relaxed"
               />
             </div>
 
-            {/* 6. Botões de Ação: [Pedir ajustes]  [✓ Aprovar] (bbbbb.png) */}
-            <div className="flex items-center justify-end gap-3 pt-2">
+            {/* 6. Botões de Ação: [Pedir ajustes]  [✓ Aprovar] (exemplo.png) */}
+            <div className="flex items-center justify-end gap-3.5 pt-2">
               <button
                 type="button"
                 onClick={handleRequestAdjustments}
-                className="px-6 sm:px-7 py-3 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold text-sm shadow-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+                className="px-6 sm:px-7 py-3 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold text-sm shadow-xs border border-slate-200/80 dark:border-slate-700 transition-all cursor-pointer"
               >
                 Pedir ajustes
               </button>
@@ -398,7 +414,7 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
               <button
                 type="button"
                 onClick={handleApproveClick}
-                className="px-7 sm:px-8 py-3 rounded-full bg-[#ff9900] hover:bg-[#e68a00] text-[#142142] font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+                className="px-7 sm:px-8 py-3 rounded-full bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-sm sm:text-base shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-2 active:scale-95"
               >
                 <Check size={18} className="stroke-[3]" />
                 <span>Aprovar</span>

@@ -5,10 +5,17 @@ import {
   Save, 
   UploadCloud, 
   ClipboardList, 
-  CheckCircle2
+  CheckCircle2,
+  AlertCircle,
+  MessageSquare,
+  Clock,
+  History,
+  ChevronDown,
+  Sparkles
 } from 'lucide-react';
 import { DemandItem, KanbanColumnId, Priority, Client, DemandAttachment, KanbanColumn, TeamMember } from '../types';
 import { kanbanColumnsData, initialTeamMembers } from '../data/mockData';
+import { isAprovacaoClienteColumn } from '../views/PortalClienteView';
 import { FileUploadDropzone } from './FileUploadDropzone';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { CustomDatePicker } from './CustomDatePicker';
@@ -123,6 +130,7 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
 
   const [isSavedToast, setIsSavedToast] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
   const currentDemandIdRef = useRef<string | null>(null);
 
@@ -197,6 +205,11 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
     const resolvedClientName = chosenClient ? chosenClient.name : client.trim();
     const resolvedClientId = chosenClient ? chosenClient.id : (selectedClientId || demand.clientId);
 
+    const isTargetApproval = isAprovacaoClienteColumn(columnId, columns);
+    const wasApproval = isAprovacaoClienteColumn(demand.columnId, columns);
+    const isMovingToApproval = isTargetApproval && (!wasApproval || demand.approvalStatus === 'alteracao_solicitada');
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     const updatedDemand: DemandItem = {
       ...demand,
       title: title.trim() || demand.title,
@@ -210,7 +223,15 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
       priority,
       priorityBars: priorityBarsMap[priority],
       dueDate,
-      statusLabel: demand.statusLabel,
+      statusLabel: isMovingToApproval ? 'Aguardando Aprovação' : demand.statusLabel,
+      ...(isMovingToApproval
+        ? {
+            approvalStatus: 'pendente',
+            approvalSentAt: timeNow,
+            lastApprovalFeedback: demand.approvalFeedback || demand.lastApprovalFeedback,
+            approvalFeedback: undefined,
+          }
+        : {}),
       thumbnail: effectiveThumbnail,
       assignee: {
         name: assigneeName,
@@ -221,9 +242,49 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
       commentsCount: demand.commentsCount || 0,
       attachmentsCount: attachments.length,
       attachments: attachments,
+      history: isMovingToApproval
+        ? [
+            ...(demand.history || []),
+            {
+              id: `hist-${Date.now()}`,
+              text: `Ajustes concluídos e demanda reenviada para Aprovação Cliente às ${timeNow}.`,
+              timestamp: timeNow,
+              author: 'Equipe da Agência',
+            },
+          ]
+        : demand.history,
     };
 
     onSave(updatedDemand);
+    setIsSavedToast(true);
+    setTimeout(() => {
+      setIsSavedToast(false);
+      onClose();
+    }, 400);
+  };
+
+  const handleMarkAdjustmentDone = () => {
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const approvalCol = columns?.find((c) => isAprovacaoClienteColumn(c.id, columns))?.id || 'aprovacao';
+    const updated: DemandItem = {
+      ...demand,
+      columnId: approvalCol as KanbanColumnId,
+      approvalStatus: 'pendente',
+      statusLabel: 'Aguardando Aprovação',
+      approvalSentAt: timeNow,
+      lastApprovalFeedback: demand.approvalFeedback || demand.lastApprovalFeedback,
+      approvalFeedback: undefined,
+      history: [
+        ...(demand.history || []),
+        {
+          id: `hist-${Date.now()}`,
+          text: `Ajustes concluídos pela equipe da agência (“${demand.approvalFeedback || 'Material ajustado'}”). Demanda reenviada para Aprovação Cliente.`,
+          timestamp: timeNow,
+          author: 'Equipe da Agência',
+        },
+      ],
+    };
+    onSave(updated);
     setIsSavedToast(true);
     setTimeout(() => {
       setIsSavedToast(false);
@@ -292,6 +353,67 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
               <CheckCircle2 size={14} />
               <span>Abrir Aprovação</span>
             </button>
+          </div>
+        )}
+
+        {/* ALERTA DE AJUSTE SOLICITADO PELO CLIENTE (DESTAQUE MÁXIMO) */}
+        {(demand.approvalFeedback || demand.approvalStatus === 'alteracao_solicitada') && (
+          <div className="p-4.5 rounded-2xl bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/50 dark:from-amber-950/50 dark:via-orange-950/40 dark:to-amber-900/30 border-2 border-amber-400 dark:border-amber-600/80 shadow-md space-y-2.5 animate-in fade-in">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                  <AlertCircle size={16} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-amber-950 dark:text-amber-200 uppercase tracking-wide block">
+                    Ajuste Solicitado pelo Cliente
+                  </span>
+                  <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                    {demand.client || 'Cliente'} {demand.approvalAnsweredAt ? `• ${demand.approvalAnsweredAt}` : ''}
+                  </span>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-amber-200/90 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 shrink-0">
+                Ajuste Pendente
+              </span>
+            </div>
+
+            <div className="bg-white/95 dark:bg-[#0c1424]/95 p-3.5 rounded-xl border border-amber-200/90 dark:border-amber-900/60 shadow-xs">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800 dark:text-amber-300 mb-1">
+                <MessageSquare size={13} className="text-amber-600 dark:text-amber-400" />
+                <span>O que o cliente pediu para ajustar:</span>
+              </div>
+              <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-relaxed italic">
+                “{demand.approvalFeedback || 'Cliente solicitou alterações no criativo/material.'}”
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-amber-900 dark:text-amber-300 pt-1 font-medium border-t border-amber-200/80 dark:border-amber-800/60">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleMarkAdjustmentDone}
+                  className="px-3 py-1.5 rounded-xl bg-[#142142] hover:bg-[#1f3263] text-[#fab518] font-black text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Concluir ajuste e reenviar automaticamente para a coluna de Aprovação do Cliente"
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Ajuste Concluído → Reenviar para Aprovação</span>
+                </button>
+              </div>
+
+              {onOpenClientApprovalPortal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenClientApprovalPortal(demand);
+                  }}
+                  className="text-amber-900 dark:text-amber-200 underline font-bold hover:text-amber-700 cursor-pointer shrink-0"
+                >
+                  Ver criativo em tamanho real
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -492,6 +614,42 @@ export const DemandDetailModal: React.FC<DemandDetailModalProps> = ({
               maxSizeBytes={200 * 1024 * 1024}
             />
           </div>
+
+          {/* Histórico e Linha do Tempo de Aprovações e Feedbacks */}
+          {demand.history && demand.history.length > 0 && (
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                className="w-full flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#fab518] py-1 cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <History size={14} className="text-[#fab518]" />
+                  <span>Histórico de Feedbacks & Decisões do Cliente ({demand.history.length})</span>
+                </div>
+                <ChevronDown size={14} className={`transition-transform duration-200 ${isHistoryExpanded ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isHistoryExpanded && (
+                <div className="mt-2.5 space-y-2 max-h-48 overflow-y-auto p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800 animate-in fade-in">
+                  {demand.history.slice().reverse().map((h) => (
+                    <div key={h.id} className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/60 text-xs space-y-1 shadow-2xs">
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{h.author}</span>
+                        <span className="flex items-center gap-1 font-mono">
+                          <Clock size={10} />
+                          {h.timestamp}
+                        </span>
+                      </div>
+                      <p className="text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+                        {h.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Footer matching NewDemandModal */}
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2.5">

@@ -99,6 +99,7 @@ export interface DemandItem {
   // Approval workflow fields
   approvalStatus?: 'pendente' | 'aprovado' | 'reprovado' | 'alteracao_solicitada';
   approvalFeedback?: string;
+  lastApprovalFeedback?: string;
   approvalSentAt?: string;
   approvalAnsweredAt?: string;
   clientPortalToken?: string;

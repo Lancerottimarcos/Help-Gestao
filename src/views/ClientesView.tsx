@@ -514,20 +514,6 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            id="btn-open-password-manager"
-            onClick={() => setIsPasswordManagerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#142142] dark:bg-slate-800 hover:bg-[#1f315e] dark:hover:bg-slate-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-all cursor-pointer border border-[#fab518]/40"
-            title="Gerenciar senhas e acessos ao portal individualmente para cada cliente"
-          >
-            <KeyRound size={15} className="text-[#fab518]" />
-            <span>Gestão de Senhas</span>
-            <span className="w-5 h-5 rounded-full bg-[#fab518] text-[#142142] text-[10px] font-black flex items-center justify-center">
-              {clients.length}
-            </span>
-          </button>
-
           {onRefreshSupabase && (
             <button
               type="button"

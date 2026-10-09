@@ -233,6 +233,42 @@ const DemandCard: React.FC<{
           </div>
         </div>
 
+        {/* Feedback Alert for requested changes */}
+        {(demand.approvalFeedback || demand.approvalStatus === 'alteracao_solicitada') && (
+          <div 
+            className="mb-2.5 p-2 rounded-xl bg-amber-50/90 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800/80 flex items-start gap-1.5 shadow-2xs"
+            title={`Ajuste solicitado pelo cliente: ${demand.approvalFeedback || 'Alterações pendentes'}`}
+          >
+            <AlertCircle size={13} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 block">
+                Ajuste do Cliente:
+              </span>
+              <p className="text-[11px] font-semibold leading-tight text-amber-950 dark:text-amber-100 line-clamp-2 italic">
+                “{demand.approvalFeedback || 'Cliente solicitou alterações no material'}”
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Revision Alert when adjustments completed */}
+        {demand.lastApprovalFeedback && !demand.approvalFeedback && demand.approvalStatus !== 'alteracao_solicitada' && (
+          <div 
+            className="mb-2.5 p-2 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800/80 flex items-start gap-1.5 shadow-2xs"
+            title={`Ajuste concluído pela agência: ${demand.lastApprovalFeedback}`}
+          >
+            <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 block">
+                Ajuste Concluído:
+              </span>
+              <p className="text-[11px] font-semibold leading-tight text-emerald-950 dark:text-emerald-100 line-clamp-2 italic">
+                “{demand.lastApprovalFeedback}”
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Clean Metadata Line (Anti-Slop Zero-Pill) */}
         <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-2.5 flex-wrap">
           <span className={`inline-flex items-center gap-1 font-bold text-[10px] px-1.5 py-0.2 rounded border ${pBadge.classes}`}>

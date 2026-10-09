@@ -49,10 +49,12 @@ import {
   Lock,
   ShieldCheck,
   Monitor,
-  PhoneCall
+  PhoneCall,
+  Instagram
 } from 'lucide-react';
 import { DemandItem, Client, UserProfile, DemandAttachment } from '../types';
 import { ClientPasswordManagerModal } from '../components/ClientPasswordManagerModal';
+import { FlamengoMockupCard } from '../components/FlamengoMockupCard';
 
 export interface ClientApprovalsViewProps {
   demands: DemandItem[];
@@ -147,7 +149,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
   }, [demands, isClientRole, currentUser.clientId, clientScopeName, clientObj]);
 
   const scopedDemands = useMemo(() => {
-    // Regra: Mostrar a demanda no portal do cliente, SOMENTE quando a demanda estiver na coluna Aprovação Cliente
+    // Regra: Mostrar a demanda no portal do cliente, quando a demanda estiver na coluna Aprovação Cliente ou com alteração solicitada
     return clientAllDemands.filter((d) => {
       const isApproval = 
         d.columnId === 'aprovacao' || 
@@ -160,8 +162,12 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
         return d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas';
       }
 
-      // Por padrão no portal do cliente, mostrar estritamente as demandas que estão na coluna Aprovação Cliente
-      return isApproval;
+      if (selectedStatusFilter === 'alteracoes') {
+        return d.approvalStatus === 'alteracao_solicitada' || Boolean(d.approvalFeedback);
+      }
+
+      // Por padrão, incluir demandas na coluna de aprovação ou que tiveram ajustes pedidos pelo cliente
+      return isApproval || d.approvalStatus === 'alteracao_solicitada' || Boolean(d.approvalFeedback);
     });
   }, [clientAllDemands, selectedStatusFilter]);
 
@@ -177,7 +183,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
         const isApproved = d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas';
         if (!isApproved) return false;
       } else if (selectedStatusFilter === 'alteracoes') {
-        if (d.approvalStatus !== 'alteracao_solicitada') return false;
+        if (d.approvalStatus !== 'alteracao_solicitada' && !d.approvalFeedback) return false;
       } else if (selectedStatusFilter === 'reprovado') {
         if (d.approvalStatus !== 'reprovado') return false;
       }
@@ -763,11 +769,15 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
                   <div className="space-y-3.5">
                     {/* Image / Creative Mockup Box */}
                     <div className="relative aspect-[4/3] rounded-[22px] overflow-hidden bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-inner group/img">
-                      <img
-                        src={demand.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=600'}
-                        alt={demand.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
-                      />
+                      {demand.title.toLowerCase().includes('flamengo') ? (
+                        <FlamengoMockupCard />
+                      ) : (
+                        <img
+                          src={demand.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=600'}
+                          alt={demand.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
+                        />
+                      )}
                       
                       {/* Gradient overlay on bottom of image for contrast */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
@@ -853,10 +863,29 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
                       </span>
                     </div>
 
-                    {/* Feedback Quote Box (When alterations requested, exactly matching pink box in image) */}
+                    {/* Feedback Quote Box (When alterations requested) */}
                     {(isAlterations || demand.approvalFeedback) && (
-                      <div className="p-3 rounded-2xl bg-rose-50/90 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 text-xs text-rose-700 dark:text-rose-200 leading-relaxed font-medium">
-                        “{demand.approvalFeedback || "Ajustar a cor do fundo e aumentar o logo no fechamento."}”
+                      <div className="p-3 rounded-2xl bg-amber-50/95 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium shadow-2xs">
+                        <span className="font-bold block text-[10px] text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <AlertCircle size={11} className="text-amber-600" />
+                          <span>Ajuste Solicitado pelo Cliente:</span>
+                        </span>
+                        <p className="italic font-semibold text-amber-950 dark:text-amber-100">
+                          “{demand.approvalFeedback || "Ajustar o material conforme orientações."}”
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Feedback Quote Box (When revision completed) */}
+                    {demand.lastApprovalFeedback && !isAlterations && !demand.approvalFeedback && (
+                      <div className="p-3 rounded-2xl bg-emerald-50/95 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium shadow-2xs">
+                        <span className="font-bold block text-[10px] text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <Check size={11} className="text-emerald-600" />
+                          <span>Material Revisado após Ajuste:</span>
+                        </span>
+                        <p className="italic font-semibold text-emerald-950 dark:text-emerald-100">
+                          “{demand.lastApprovalFeedback}”
+                        </p>
                       </div>
                     )}
 
@@ -1317,103 +1346,332 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
 
       {/* 6. MODALS */}
 
-      {/* LIGHTBOX / FULLSCREEN PREVIEW MODAL */}
-      {previewDemand && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setPreviewDemand(null)}
-        >
+      {/* LIGHTBOX / FULLSCREEN PREVIEW MODAL - DESIGN FIEL À IMAGEM "EXEMPLO.PNG" */}
+      {previewDemand && (() => {
+        const clientName = previewDemand.client || 'Portal Publicitário';
+        const clientInitials = (() => {
+          const raw = clientName.trim().split(/\s+/).filter(Boolean);
+          if (raw.length >= 2) return `${raw[0][0]}${raw[1][0]}`.toUpperCase();
+          return clientName.slice(0, 2).toUpperCase();
+        })();
+
+        const mediaItems = (previewDemand.attachments || []).filter(
+          (a) => a.type === 'image' || a.type === 'video'
+        );
+
+        const isFlamengoPost = 
+          previewDemand.title.toLowerCase().includes('flamengo') || 
+          (previewDemand.description && previewDemand.description.toLowerCase().includes('flamengo')) ||
+          mediaItems.length === 0;
+
+        const effectiveMedia = mediaItems.length > 0 
+          ? mediaItems 
+          : (previewDemand.thumbnail ? [{
+              id: 'thumb-1',
+              name: `${previewDemand.title}.jpg`,
+              size: 1024 * 1024,
+              type: 'image',
+              url: previewDemand.thumbnail,
+              uploadedAt: 'Versão para aprovação',
+            }] : [
+              {
+                id: 'slide-1',
+                name: 'Lâmina 1 - Mockup Principal.jpg',
+                size: 1024 * 1024,
+                type: 'image',
+                url: '',
+                uploadedAt: 'Versão para aprovação',
+              },
+              {
+                id: 'slide-2',
+                name: 'Lâmina 2 - Detalhes do Design.jpg',
+                size: 1024 * 1024,
+                type: 'image',
+                url: 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=1000',
+                uploadedAt: 'Versão para aprovação',
+              },
+              {
+                id: 'slide-3',
+                name: 'Lâmina 3 - Encerramento & CTA.jpg',
+                size: 1024 * 1024,
+                type: 'image',
+                url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=1000',
+                uploadedAt: 'Versão para aprovação',
+              }
+            ]);
+
+        const totalSlides = effectiveMedia.length;
+        const currentMedia = effectiveMedia[previewSlideIndex] || effectiveMedia[0];
+        const isApproved = previewDemand.approvalStatus === 'aprovado' || previewDemand.columnId === 'agendamento' || previewDemand.columnId === 'concluidas';
+        const placementLabel = previewDemand.type === 'Stories' ? 'Stories' : previewDemand.type === 'Carrossel' ? 'Carrossel' : 'Feed';
+        const scheduledDate = previewDemand.dueDate || '12/10 às 18:00';
+
+        return (
           <div 
-            className="bg-white dark:bg-[#0f172a] w-full max-w-4xl rounded-[32px] overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in"
+            onClick={() => setPreviewDemand(null)}
           >
-            {/* Left Media Box */}
-            <div className="md:w-3/5 bg-slate-950 flex items-center justify-center relative p-4 min-h-[350px]">
-              <img
-                src={previewDemand.thumbnail || 'https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&q=80&w=800'}
-                alt={previewDemand.title}
-                className="max-h-[75vh] w-auto object-contain rounded-2xl shadow-xl"
-              />
-              <button
-                type="button"
-                onClick={() => setPreviewDemand(null)}
-                className="absolute top-4 left-4 p-2 rounded-full bg-black/60 text-white hover:bg-black/90 cursor-pointer md:hidden"
-              >
-                <X size={16} />
-              </button>
-            </div>
+            <div 
+              className="bg-[#EEF0F4] dark:bg-[#0c1220] w-full max-w-5xl rounded-[32px] sm:rounded-[36px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto animate-in zoom-in-95 text-slate-900 dark:text-slate-100 flex flex-col md:grid md:grid-cols-12 max-h-[94vh] relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* TOP HEADER: AF Agência Farol • Link de aprovação (exemplo.png) */}
+              <header className="col-span-12 px-6 sm:px-8 py-4 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-[#0c1220]/70 backdrop-blur-md shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-[#12151e] text-white flex items-center justify-center font-black text-xs tracking-tight shadow-xs shrink-0">
+                    AF
+                  </div>
+                  <div className="flex items-baseline gap-2.5">
+                    <span className="font-extrabold text-slate-900 dark:text-white text-sm tracking-tight">
+                      Agência Farol
+                    </span>
+                    <span className="text-slate-400 dark:text-slate-500 text-xs font-normal">
+                      Link de aprovação
+                    </span>
+                  </div>
+                </div>
 
-            {/* Right Details Box */}
-            <div className="md:w-2/5 p-6 flex flex-col justify-between space-y-4 overflow-y-auto">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-300/60">
-                    {previewDemand.type || 'Post'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewDemand(null)}
-                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer hidden md:block"
+                <button
+                  type="button"
+                  onClick={() => setPreviewDemand(null)}
+                  className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Fechar visualização"
+                >
+                  <X size={16} />
+                </button>
+              </header>
+
+              {/* COLUNA 1 (ESQUERDA): CARD VISUAL DA PEÇA (MOCKUP / ARTWORK) */}
+              {/* Exactly matching CSS Selector 1: ... > div:nth-of-type(5) > div:nth-of-type(1) > div:nth-of-type(1) */}
+              <div className="md:col-span-5 p-6 sm:p-8 flex flex-col items-center justify-center overflow-y-auto">
+                <div className="w-full max-w-[390px] aspect-[4/5] rounded-[32px] sm:rounded-[36px] overflow-hidden shadow-xl border border-slate-200/90 dark:border-slate-800/80 bg-gradient-to-b from-[#fbf8f3] via-[#ffedd5] to-[#f97316] relative flex flex-col justify-between group">
+                  
+                  {/* Badge Contador de Lâmina: 1/3 (Top-Right) */}
+                  <div className="absolute top-4 right-4 z-20 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-xs font-black tracking-wider shadow-xs">
+                    {previewSlideIndex + 1}/{totalSlides}
+                  </div>
+
+                  {/* Botão de Expandir Lightbox */}
+                  {currentMedia?.url && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(currentMedia.url, '_blank')}
+                      className="absolute bottom-4 left-4 z-20 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                      title="Ampliar imagem"
+                    >
+                      <Maximize2 size={15} />
+                    </button>
+                  )}
+
+                  {/* Controles de Navegação do Carrossel */}
+                  {totalSlides > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSlideIndex((prev) => (prev > 0 ? prev - 1 : totalSlides - 1))}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                        title="Slide anterior"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSlideIndex((prev) => (prev < totalSlides - 1 ? prev + 1 : 0))}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                        title="Próximo slide"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Imagem do Post ou Ilustração Mockup Fiel ao Exemplo */}
+                  <div 
+                    className="w-full h-full relative cursor-pointer overflow-hidden"
+                    onClick={totalSlides > 1 ? () => setPreviewSlideIndex((prev) => (prev < totalSlides - 1 ? prev + 1 : 0)) : undefined}
                   >
-                    <X size={18} />
-                  </button>
+                    {previewSlideIndex === 0 && (isFlamengoPost || !currentMedia?.url) ? (
+                      <FlamengoMockupCard />
+                    ) : currentMedia?.url ? (
+                      <img
+                        src={currentMedia.url}
+                        alt={previewDemand.title}
+                        className="absolute inset-0 w-full h-full object-cover rounded-[32px] sm:rounded-[36px]"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 w-full h-full flex flex-col justify-between p-6 sm:p-7 bg-gradient-to-b from-[#fbf8f3] via-[#ffedd5] to-[#f97316] text-[#142142]">
+                        <div className="pt-8">
+                          <p className="text-xl sm:text-2xl font-black uppercase tracking-tight text-[#142142]">
+                            {previewDemand.title}
+                          </p>
+                        </div>
+                        <div className="pb-4">
+                          <p className="text-xs text-slate-800 font-medium">
+                            {previewDemand.description || 'Mockup para aprovação da agência'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
 
-                <h2 className="text-xl font-black text-slate-900 dark:text-white">
-                  {previewDemand.title}
-                </h2>
-
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <User size={14} />
-                  <span>{previewDemand.client}</span>
-                  <span>•</span>
-                  <span>{previewDemand.dueDate ? previewDemand.dueDate.split('-').reverse().join('/') : '24/08/2026'}</span>
-                </div>
-
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {previewDemand.description || 'Criativo desenvolvido pela equipe da Help Ideias Digitais para publicação nas redes sociais da sua empresa.'}
-                </p>
-
-                {previewDemand.approvalFeedback && (
-                  <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-200">
-                    <p className="font-bold mb-1">Último ajuste solicitado:</p>
-                    <p>“{previewDemand.approvalFeedback}”</p>
+                {/* Indicador de Bolinhas do Carrossel */}
+                {totalSlides > 1 && (
+                  <div className="flex items-center gap-1.5 pt-3">
+                    {effectiveMedia.map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setPreviewSlideIndex(idx)}
+                        className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                          previewSlideIndex === idx 
+                            ? 'w-6 bg-[#f97316]' 
+                            : 'w-1.5 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
+                        }`}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
 
-              {/* Action Buttons in Modal */}
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                <div className="flex items-center gap-2">
+              {/* COLUNA 2 (DIREITA): INFORMAÇÕES DO POST & DECISÃO DO CLIENTE */}
+              {/* Exactly matching CSS Selector 2: ... > div:nth-of-type(5) > div:nth-of-type(1) > div:nth-of-type(2) */}
+              <div className="md:col-span-7 p-6 sm:p-8 lg:p-10 flex flex-col justify-center space-y-5 overflow-y-auto">
+                
+                {/* 1. Meta Row: [PP] Portal Publicitário • Feed • 12/10 às 18:00 */}
+                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
+                  <div className="w-7 h-7 rounded-full bg-[#f97316] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                    {clientInitials}
+                  </div>
+                  <span className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                    {clientName}
+                  </span>
+                  <span className="text-slate-400">·</span>
+                  <div className="flex items-center gap-1 font-medium text-slate-600 dark:text-slate-300">
+                    <Instagram size={14} className="text-slate-500" />
+                    <span>{placementLabel}</span>
+                  </div>
+                  <span className="text-slate-400">·</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">
+                    {scheduledDate}
+                  </span>
+                </div>
+
+                {/* 2. Título do Post (Flamengo: camisa feita pelo público) */}
+                <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-normal text-slate-900 dark:text-white tracking-tight leading-snug">
+                  {previewDemand.title}
+                </h1>
+
+                {/* 3. Descrição / Legenda do Post */}
+                <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
+                  {previewDemand.description || 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.'}
+                </p>
+
+                {/* 4. Status Capsule: Aguardando sua aprovação */}
+                <div>
+                  {isApproved ? (
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-600 text-white text-xs sm:text-sm font-medium shadow-xs">
+                      <Check size={14} className="stroke-[2.5]" />
+                      <span>Aprovado para agendamento</span>
+                    </div>
+                  ) : previewDemand.approvalStatus === 'alteracao_solicitada' ? (
+                    <div className="space-y-2.5">
+                      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500 text-white text-xs sm:text-sm font-medium shadow-xs">
+                        <Clock size={14} className="stroke-[2.5]" />
+                        <span>Ajustes solicitados à agência</span>
+                      </div>
+                      {previewDemand.approvalFeedback && (
+                        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 text-amber-900 dark:text-amber-100 text-xs sm:text-sm font-medium shadow-2xs">
+                          <span className="font-bold block text-[11px] text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                            <MessageSquare size={13} className="text-amber-600 dark:text-amber-400" />
+                            <span>O que o cliente pediu para ajustar:</span>
+                          </span>
+                          <p className="italic font-bold text-slate-900 dark:text-slate-100 leading-relaxed">
+                            “{previewDemand.approvalFeedback}”
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#8E99A8] text-white text-xs sm:text-sm font-medium shadow-xs">
+                        <Clock size={14} className="stroke-[2.5]" />
+                        <span>Aguardando sua aprovação</span>
+                      </div>
+                      {previewDemand.lastApprovalFeedback && (
+                        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/80 text-emerald-900 dark:text-emerald-100 text-xs sm:text-sm font-medium shadow-2xs">
+                          <span className="font-bold block text-[11px] text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                            <Check size={13} className="text-emerald-600 dark:text-emerald-400" />
+                            <span>Material revisado após solicitação de ajuste:</span>
+                          </span>
+                          <p className="italic font-bold text-slate-900 dark:text-slate-100 leading-relaxed">
+                            “{previewDemand.lastApprovalFeedback}”
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Caixa de Comentário para a Agência (exemplo.png) */}
+                <div className="bg-white dark:bg-[#121827] rounded-[24px] p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-[#f97316]/30 transition-all">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                    <MessageSquare size={14} className="text-slate-500" />
+                    <span>Comentário para a agência</span>
+                  </div>
+                  <textarea
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    placeholder="Amei! Ficou excelente... Ou descreva os ajustes desejados"
+                    rows={2}
+                    className="w-full bg-transparent text-sm sm:text-base text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none font-normal leading-relaxed"
+                  />
+                </div>
+
+                {/* 6. Botões de Ação: [Pedir ajustes]  [✓ Aprovar] (exemplo.png) */}
+                <div className="flex items-center justify-end gap-3.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (feedbackText.trim()) {
+                        onClientApprovalAction(previewDemand.id, 'alteracao_solicitada', feedbackText.trim());
+                        setActionSuccessNotice({
+                          id: previewDemand.id,
+                          message: `Solicitação de alteração enviada para "${previewDemand.title}".`,
+                          type: 'warn',
+                        });
+                        setPreviewDemand(null);
+                        setFeedbackText('');
+                      } else {
+                        setFeedbackDemand(previewDemand);
+                        setPreviewDemand(null);
+                      }
+                    }}
+                    className="px-6 sm:px-7 py-3 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold text-sm shadow-xs border border-slate-200/80 dark:border-slate-700 transition-all cursor-pointer"
+                  >
+                    Pedir ajustes
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
                       handleApprove(previewDemand);
                       setPreviewDemand(null);
                     }}
-                    className="flex-1 py-3 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                    className="px-7 sm:px-8 py-3 rounded-full bg-[#f97316] hover:bg-[#ea580c] text-white font-black text-sm sm:text-base shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-2 active:scale-95"
                   >
-                    <CheckCircle2 size={16} />
-                    <span>Aprovar Agora</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFeedbackDemand(previewDemand);
-                      setFeedbackText(previewDemand.approvalFeedback || '');
-                      setPreviewDemand(null);
-                    }}
-                    className="px-4 py-3 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
-                  >
-                    Solicitar Ajuste
+                    <Check size={18} className="stroke-[3]" />
+                    <span>Aprovar</span>
                   </button>
                 </div>
+
               </div>
+
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* FEEDBACK / ALTERAÇÃO MODAL */}
       {feedbackDemand && (

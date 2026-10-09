@@ -1690,7 +1690,27 @@ export const DemandasView: React.FC<DemandasViewProps> = ({
                       })()}
                       <div>
                         <div className="group-hover:text-[#fab518] group-hover:underline">{demand.title}</div>
-                        <span className="text-[10px] text-slate-400 font-normal">{demand.id}</span>
+                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                          <span className="text-[10px] text-slate-400 font-normal">{demand.id}</span>
+                          {(demand.approvalFeedback || demand.approvalStatus === 'alteracao_solicitada') && (
+                            <span 
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-[10px] font-bold text-amber-800 dark:text-amber-300"
+                              title={`Ajuste do cliente: ${demand.approvalFeedback || 'Solicitado'}`}
+                            >
+                              <AlertCircle size={10} className="text-amber-600 shrink-0" />
+                              <span className="max-w-[200px] truncate">Ajuste: “{demand.approvalFeedback || 'Alterações pendentes'}”</span>
+                            </span>
+                          )}
+                          {demand.lastApprovalFeedback && !demand.approvalFeedback && demand.approvalStatus !== 'alteracao_solicitada' && (
+                            <span 
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold text-emerald-800 dark:text-emerald-300"
+                              title={`Ajuste concluído pela agência: ${demand.lastApprovalFeedback}`}
+                            >
+                              <CheckCircle2 size={10} className="text-emerald-600 shrink-0" />
+                              <span className="max-w-[200px] truncate">Revisado: “{demand.lastApprovalFeedback}”</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </td>
