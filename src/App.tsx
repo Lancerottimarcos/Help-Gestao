@@ -663,11 +663,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
             const localPending = cleanPrev.filter((c) => !remoteMap.has(c.id));
             const merged = [...cleanRemote, ...localPending];
 
-            // Se existiam clientes cadastrados localmente que o servidor ainda não tem, envia para garantir persistência
-            if (localPending.length > 0) {
-              serverDbService.saveDatabase({ clients: merged });
-            }
-
             if (
               cleanPrev.length === merged.length &&
               cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.name === merged[idx]?.name && p.monthlyFee === merged[idx]?.monthlyFee)
@@ -733,10 +728,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
               }
             });
 
-            if (localPending.length > 0) {
-              serverDbService.saveDatabase({ demands: merged });
-            }
-
             if (
               cleanPrev.length === merged.length &&
               cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.columnId === merged[idx]?.columnId && p.title === merged[idx]?.title)
@@ -760,10 +751,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
             const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
             const localPending = cleanPrev.filter((s) => !remoteMap.has(s.id));
             const merged = [...cleanRemote, ...localPending];
-
-            if (localPending.length > 0) {
-              serverDbService.saveDatabase({ services: merged });
-            }
 
             if (
               cleanPrev.length === merged.length &&
@@ -1573,13 +1560,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ demands: updated }, true);
       return updated;
     });
 
     const demandsToSave = nextDemands.length > 0 ? nextDemands : [newDemand, ...demands.filter(d => d.id !== newDemand.id)];
     serverDbService.saveDatabase({ demands: demandsToSave }, true);
-    serverDbService.saveDemandsDirectly(demandsToSave);
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
@@ -1596,7 +1581,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients }, true);
+      serverDbService.saveDatabase({ clients: updatedClients });
       return updatedClients;
     });
 
@@ -1981,12 +1966,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ clients: updated }, true);
       return updated;
     });
     const clientsToSave = updatedClients.length > 0 ? updatedClients : [newClient, ...clients.filter(c => c.id !== newClient.id)];
     serverDbService.saveDatabase({ clients: clientsToSave }, true);
-    serverDbService.saveClientsDirectly(clientsToSave);
     supabaseService.upsertClient(newClient);
   };
 
@@ -2110,12 +2093,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_services', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ services: updated }, true);
       return updated;
     });
     const servicesToSave = updatedServices.length > 0 ? updatedServices : [newService, ...services.filter(s => s.id !== newService.id)];
     serverDbService.saveDatabase({ services: servicesToSave }, true);
-    serverDbService.saveServicesDirectly(servicesToSave);
     if (supabaseService.isConfigured()) {
       supabaseService.upsertService(newService);
     }
@@ -2129,12 +2110,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_services', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ services: updated }, true);
       return updated;
     });
     const servicesToSave = updatedServices.length > 0 ? updatedServices : services.map((s) => (s.id === updatedService.id ? updatedService : s));
     serverDbService.saveDatabase({ services: servicesToSave }, true);
-    serverDbService.saveServicesDirectly(servicesToSave);
     if (supabaseService.isConfigured()) {
       supabaseService.upsertService(updatedService);
     }
@@ -2149,12 +2128,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_services', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ services: updated }, true);
       return updated;
     });
     const servicesToSave = updatedServices.length > 0 ? updatedServices : services.filter(s => s.id !== serviceId);
     serverDbService.saveDatabase({ services: servicesToSave }, true);
-    serverDbService.saveServicesDirectly(servicesToSave);
     if (supabaseService.isConfigured()) {
       supabaseService.deleteService(serviceId);
     }

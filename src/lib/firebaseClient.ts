@@ -1,5 +1,4 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let app: FirebaseApp | null = null;
@@ -10,42 +9,20 @@ try {
     app = getApp();
   }
 } catch (err) {
-  console.warn('Erro ao inicializar Firebase app no navegador:', err);
+  // Silent fallback
 }
 
 export { app };
 
-let _firestoreClientInstance: any = null;
-let _firestoreInitAttempted = false;
-
+// Client seguro sem gRPC streams para evitar quota exhaustion ou connection resets no navegador
 export function getFirestoreClientSafe(): any {
-  if (_firestoreClientInstance) return _firestoreClientInstance;
-  if (_firestoreInitAttempted) return null;
-  _firestoreInitAttempted = true;
-  try {
-    if (!app) return null;
-    const dbId = (firebaseConfig as any)?.firestoreDatabaseId;
-    _firestoreClientInstance = dbId ? getFirestore(app, dbId) : getFirestore(app);
-    return _firestoreClientInstance;
-  } catch (err) {
-    try {
-      if (app) {
-        _firestoreClientInstance = getFirestore(app);
-        return _firestoreClientInstance;
-      }
-    } catch {}
-    console.warn('Google Cloud Firestore client SDK não está disponível no bundle do navegador, usando REST/API:', err);
-    return null;
-  }
+  return null;
 }
 
-// Proxy seguro para evitar crashes se módulos legados acessarem firestoreClient diretamente
+// Proxy de compatibilidade caso algum módulo legado chame métodos do firestoreClient
 export const firestoreClient: any = new Proxy({} as any, {
-  get(_target, prop) {
-    const instance = getFirestoreClientSafe();
-    if (!instance) return undefined;
-    const val = instance[prop];
-    return typeof val === 'function' ? val.bind(instance) : val;
+  get(_target, _prop) {
+    return undefined;
   },
 });
 
@@ -72,8 +49,28 @@ function parseFirestoreRestValue(val: any): any {
   return val;
 }
 
+function toFirestoreRestValue(val: any): any {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (typeof val === 'number') {
+    return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  }
+  if (typeof val === 'string') return { stringValue: val };
+  if (Array.isArray(val)) {
+    return { arrayValue: { values: val.map(toFirestoreRestValue) } };
+  }
+  if (typeof val === 'object') {
+    const fields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (v !== undefined) fields[k] = toFirestoreRestValue(v);
+    }
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+
 export async function fetchFirestoreData(collectionName = 'agency_data', docId = 'main_state'): Promise<any | null> {
-  // 1. Tenta buscar da API do servidor central (persistência local + nuvem)
+  // 1. Tenta buscar da API do servidor central (persistência local + nuvem com cache em disco)
   try {
     if (typeof window !== 'undefined' && window.fetch) {
       const res = await fetch('/api/database');
@@ -86,7 +83,7 @@ export async function fetchFirestoreData(collectionName = 'agency_data', docId =
     }
   } catch {}
 
-  // 2. Fallback de alta disponibilidade via Firestore REST API (sem dependência de chunks do SDK no navegador)
+  // 2. Fallback de alta disponibilidade via Firestore REST API (sem gRPC stream e sem limite de chunk)
   try {
     const config = firebaseConfig as any;
     if (config.projectId && config.apiKey) {
@@ -109,32 +106,13 @@ export async function fetchFirestoreData(collectionName = 'agency_data', docId =
         }
       }
     }
-  } catch (err) {
-    console.warn('Erro ao consultar Firestore via REST API:', err);
-  }
-
-  // 3. Fallback adicional via SDK do Firestore (se inicializado com sucesso)
-  try {
-    const db = getFirestoreClientSafe();
-    if (db) {
-      const docRef = doc(db, collectionName, docId);
-      const snap = await Promise.race([
-        getDoc(docRef),
-        new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout Firestore SDK')), 4000)),
-      ]);
-      if (snap && snap.exists()) {
-        return snap.data();
-      }
-    }
-  } catch (err) {
-    console.warn('Erro ao consultar Firestore diretamente via SDK:', err);
-  }
+  } catch {}
 
   return null;
 }
 
 export async function saveFirestoreData(data: Record<string, any>, collectionName = 'agency_data', docId = 'main_state'): Promise<boolean> {
-  // 1. Gravação via /api/database (persiste em disco e sincroniza na nuvem)
+  // 1. Gravação primária via /api/database (persiste em disco e sincroniza na nuvem com debounce)
   let apiSuccess = false;
   try {
     if (typeof window !== 'undefined' && window.fetch) {
@@ -147,17 +125,28 @@ export async function saveFirestoreData(data: Record<string, any>, collectionNam
     }
   } catch {}
 
-  // 2. Garante persistência direta no Firestore em caso de falha da API
-  if (!apiSuccess) {
-    try {
-      const db = getFirestoreClientSafe();
-      if (db) {
-        const docRef = doc(db, collectionName, docId);
-        await setDoc(docRef, { ...data, updatedAt: Date.now() }, { merge: true });
-        return true;
-      }
-    } catch {}
-  }
+  if (apiSuccess) return true;
 
-  return apiSuccess;
+  // 2. Fallback direto via REST API caso o servidor backend esteja inacessível
+  try {
+    const config = firebaseConfig as any;
+    if (config.projectId && config.apiKey) {
+      const dbId = config.firestoreDatabaseId || '(default)';
+      const fields: Record<string, any> = {};
+      for (const [k, v] of Object.entries(data)) {
+        if (v !== undefined) fields[k] = toFirestoreRestValue(v);
+      }
+      fields.updatedAt = toFirestoreRestValue(Date.now());
+
+      const restUrl = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${dbId}/documents/${collectionName}/${docId}?key=${config.apiKey}`;
+      const res = await fetch(restUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+      return res.ok;
+    }
+  } catch {}
+
+  return false;
 }
