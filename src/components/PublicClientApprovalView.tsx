@@ -184,16 +184,16 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
   return (
     <div className="min-h-screen bg-[#EEF0F4] dark:bg-[#090d18] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-[#ff9900] selection:text-[#142142]">
       
-      {/* 1. TOP MINIMALIST HEADER: AF Agência Farol • Link de aprovação (bbbbb.png) */}
+      {/* 1. TOP MINIMALIST HEADER: AH Agência Help • Link de aprovação */}
       <header className="w-full px-6 sm:px-12 py-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Logo Circular Escuro "AF" */}
+          {/* Logo Circular Escuro "AH" */}
           <div className="w-9 h-9 rounded-full bg-[#12151e] text-white flex items-center justify-center font-black text-xs tracking-tight shadow-xs shrink-0">
-            AF
+            AH
           </div>
           <div className="flex items-baseline gap-3">
             <span className="font-extrabold text-slate-900 dark:text-white text-base tracking-tight">
-              Agência Farol
+              Agência Help
             </span>
             <span className="text-slate-400 dark:text-slate-500 text-xs font-normal">
               Link de aprovação

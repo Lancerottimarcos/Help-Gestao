@@ -1451,15 +1451,15 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
               className="bg-[#EEF0F4] dark:bg-[#0c1220] w-full max-w-5xl rounded-[32px] sm:rounded-[36px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[94vh] my-auto animate-in zoom-in-95 text-slate-900 dark:text-slate-100"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* TOP HEADER: AF Agência Farol • Link de aprovação (exemplo.png) */}
+              {/* TOP HEADER: AH Agência Help • Link de aprovação */}
               <div className="px-6 sm:px-8 py-4 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-[#0c1220]/70 backdrop-blur-md shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-[#12151e] text-white flex items-center justify-center font-black text-xs tracking-tight shadow-xs shrink-0">
-                    AF
+                    AH
                   </div>
                   <div className="flex items-baseline gap-2.5">
                     <span className="font-extrabold text-slate-900 dark:text-white text-sm tracking-tight">
-                      Agência Farol
+                      Agência Help
                     </span>
                     <span className="text-slate-400 dark:text-slate-500 text-xs font-normal">
                       Link de aprovação
