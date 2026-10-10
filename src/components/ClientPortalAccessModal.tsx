@@ -113,7 +113,7 @@ export const ClientPortalAccessModal: React.FC<ClientPortalAccessModalProps> = (
     const cleanPass = password.trim();
 
     const message = `Olá, equipe da *${client.name}*! 👋\n\n` +
-      `Seu acesso exclusivo ao Portal de Demandas e Materiais da *Help Ideias Digitais* está configurado:\n\n` +
+      `Seu acesso exclusivo ao Portal de Demandas e Materiais da *Agência Help* está configurado:\n\n` +
       `🌐 *Link de Acesso:* ${origin}\n` +
       `👤 *Usuário:* ${cleanUser}\n` +
       `🔑 *Senha:* ${cleanPass}\n\n` +
@@ -130,7 +130,7 @@ export const ClientPortalAccessModal: React.FC<ClientPortalAccessModalProps> = (
     const cleanPass = password.trim();
 
     const message = `Olá, equipe da *${client.name}*! 👋\n\n` +
-      `Seu acesso exclusivo ao Portal de Demandas da *Help Ideias Digitais* está pronto:\n\n` +
+      `Seu acesso exclusivo ao Portal de Demandas da *Agência Help* está pronto:\n\n` +
       `🌐 *Link de Acesso:* ${origin}\n` +
       `👤 *Usuário:* ${cleanUser}\n` +
       `🔑 *Senha:* ${cleanPass}\n\n` +

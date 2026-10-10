@@ -212,7 +212,7 @@ export const ClientLoginPage: React.FC<ClientLoginPageProps> = ({
               <span className="text-[10px] font-black uppercase tracking-wider text-[#142142] bg-[#fab518] px-2.5 py-0.5 rounded-full shadow-xs">
                 Portal do Cliente
               </span>
-              <p className="text-xs font-bold text-slate-400 mt-0.5">Help Ideias Digitais</p>
+              <p className="text-xs font-bold text-slate-400 mt-0.5">Agência Help</p>
             </div>
           </div>
 

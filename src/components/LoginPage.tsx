@@ -494,10 +494,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     onChange={(e) => setUsername(e.target.value)}
                     onKeyDown={handleKeyActivity}
                     onKeyUp={handleKeyActivity}
-                    className={`w-full h-[52px] bg-[#f4f5f7] rounded-[18px] px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none transition-all ${
+                    className={`w-full h-[52px] bg-[#edf0f4] rounded-[18px] border border-transparent px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-[#f4f5f7] transition-all ${
                       isAgency
-                        ? 'border border-[#f99616] ring-4 ring-[#f99616]/20 bg-[#f4f5f7]'
-                        : 'border border-[#142142] ring-4 ring-[#142142]/15 bg-[#f4f5f7]'
+                        ? 'focus:border-[#f99616] focus:ring-4 focus:ring-[#f99616]/20'
+                        : 'focus:border-[#142142] focus:ring-4 focus:ring-[#142142]/15'
                     }`}
                   />
                 </div>

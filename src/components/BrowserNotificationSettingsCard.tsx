@@ -158,7 +158,7 @@ export const BrowserNotificationSettingsCard: React.FC = () => {
               <p className="font-bold">
                 {isPermissionDenied
                   ? 'Permissão de notificação negada pelo navegador'
-                  : 'Autorize o Help Ideias Digitais a emitir notificações'}
+                  : 'Autorize a Agência Help a emitir notificações'}
               </p>
               <p className="text-[11px] opacity-90 leading-relaxed">
                 {isPermissionDenied

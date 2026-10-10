@@ -1604,8 +1604,8 @@ export const supabaseService = {
 
       const clientPayload = {
         id: testClientId,
-        name: 'Help Ideias - Cliente Demonstração',
-        company_name: 'Help Ideias Digitais',
+        name: 'Agência Help - Cliente Demonstração',
+        company_name: 'Agência Help',
         segment: 'Marketing Digital',
         contact_name: 'Marcos Lancerotti',
         email: 'lancerottirmarcos@gmail.com',

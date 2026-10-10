@@ -100,8 +100,8 @@ export function generateSystemBackup(exportedBy = 'lancerottirmarcos@gmail.com')
 
   const now = new Date();
   const envelope: BackupEnvelope = {
-    app: 'Help Ideias Digitais',
-    systemName: 'Help Ideias Digitais - Agency OS',
+    app: 'Agência Help',
+    systemName: 'Agência Help - Agency OS',
     version: '2.5.0',
     exportDate: now.toISOString(),
     exportTimestamp: now.getTime(),
@@ -196,8 +196,8 @@ export function validateBackupJson(jsonString: string): BackupValidationResult {
 
     const now = new Date();
     envelope = {
-      app: 'Help Ideias Digitais',
-      systemName: 'Help Ideias Digitais - Agency OS',
+      app: 'Agência Help',
+      systemName: 'Agência Help - Agency OS',
       version: 'Compatibilidade Direta',
       exportDate: now.toISOString(),
       exportTimestamp: now.getTime(),

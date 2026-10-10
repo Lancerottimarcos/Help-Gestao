@@ -443,7 +443,7 @@ export const PublicClientApprovalView: React.FC<PublicClientApprovalViewProps> =
 
       {/* Rodapé Minimalista */}
       <footer className="w-full py-4 text-center text-xs text-slate-400 dark:text-slate-500">
-        <p>© {new Date().getFullYear()} Help Ideias Digitais • Link Seguro de Aprovação</p>
+        <p>© {new Date().getFullYear()} Agência Help • Link Seguro de Aprovação</p>
       </footer>
 
     </div>

@@ -280,7 +280,7 @@ export const AgencyLoginPage: React.FC<AgencyLoginPageProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                   Agência
                 </span>
-                <p className="text-xs font-bold text-slate-400 mt-0.5">Help Ideias Digitais</p>
+                <p className="text-xs font-bold text-slate-400 mt-0.5">Agência Help</p>
               </div>
             </div>
             

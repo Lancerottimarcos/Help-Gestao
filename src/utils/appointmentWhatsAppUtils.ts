@@ -22,7 +22,7 @@ export function buildAppointmentWhatsAppMessage(
 
   let msg = `${greeting}
 
-Agendamos a nossa reunião online com a equipe da *Help Ideias Digitais* 🚀
+Agendamos a nossa reunião online com a equipe da *Agência Help* 🚀
 
 📌 *Assunto:* ${appointment.title}
 📅 *Data:* ${dateFormatted}

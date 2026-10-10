@@ -174,7 +174,7 @@ export function exportClientDossierJSON(
   const dossier = {
     _relatorio: 'Dossiê de Dados do Titular (LGPD - Lei 13.709/2018)',
     _data_extracao: new Date().toISOString(),
-    _responsavel_tratamento: 'Help Ideias Digitais',
+    _responsavel_tratamento: 'Agência Help',
     _base_legal: 'Art. 7º, V - Execução de Contrato e Procedimentos Preliminares',
     identificacao_titular: {
       id: client.id,

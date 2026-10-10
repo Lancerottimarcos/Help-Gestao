@@ -1801,7 +1801,7 @@ export const DemandasView: React.FC<DemandasViewProps> = ({
           <CalendarIcon size={40} className="mx-auto text-[#fab518]" />
           <h4 className="text-base font-bold text-[#142142] dark:text-white">Calendário Editorial de Publicações</h4>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Visualização das postagens programadas para Facebook, Instagram e campanhas de tráfego pago da Help Ideias Digitais para a semana atual.
+            Visualização das postagens programadas para Facebook, Instagram e campanhas de tráfego pago da Agência Help para a semana atual.
           </p>
           <div className="pt-4 flex justify-center gap-4">
             <span className="text-xs font-bold px-3 py-1 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800 rounded-lg">

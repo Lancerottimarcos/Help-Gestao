@@ -371,7 +371,7 @@ export const PublicBudgetProposalView: React.FC<PublicBudgetProposalViewProps> =
     if (feedbackType === 'ajuste') {
       onRequestChange(proposal.id, sanitized);
       setActionSuccessMessage(
-        'Solicitação de ajuste enviada com sucesso! A equipe da Help Ideias Digitais revisará sua mensagem para readequar a proposta.'
+        'Solicitação de ajuste enviada com sucesso! A equipe da Agência Help revisará sua mensagem para readequar a proposta.'
       );
     } else {
       onReject(proposal.id, sanitized);
@@ -423,7 +423,7 @@ export const PublicBudgetProposalView: React.FC<PublicBudgetProposalViewProps> =
               <ShieldCheck size={13} className="text-[#fab518]" />
               <span>Portal de Aprovação Comercial</span>
             </span>
-            <p className="text-xs font-bold text-[#142142]">Help Ideias Digitais</p>
+            <p className="text-xs font-bold text-[#142142]">Agência Help</p>
           </div>
         </div>
 
@@ -469,9 +469,9 @@ export const PublicBudgetProposalView: React.FC<PublicBudgetProposalViewProps> =
             <div className="space-y-3">
               <HelpLogo variant="full" size="lg" className="h-10 sm:h-11" />
               <div className="text-xs text-slate-500 space-y-0.5 pt-1">
-                <p className="font-bold text-[#142142]">Help Ideias Digitais</p>
+                <p className="font-bold text-[#142142]">Agência Help</p>
                 <p>Estratégia, Performance & Criação de Alto Impacto</p>
-                <p className="text-[11px] text-slate-400">contato@helpideiasdigitais.com.br</p>
+                <p className="text-[11px] text-slate-400">contato@agenciahelp.com.br</p>
               </div>
             </div>
 
@@ -702,7 +702,7 @@ export const PublicBudgetProposalView: React.FC<PublicBudgetProposalViewProps> =
                     Proposta Comercial Aprovada!
                   </h3>
                   <p className="text-xs sm:text-sm text-emerald-800 leading-relaxed">
-                    Este orçamento foi formalmente validado. Nossa equipe de operações da Help Ideias Digitais já foi acionada para o kickoff.
+                    Este orçamento foi formalmente validado. Nossa equipe de operações da Agência Help já foi acionada para o kickoff.
                   </p>
                 </div>
 
@@ -792,7 +792,7 @@ export const PublicBudgetProposalView: React.FC<PublicBudgetProposalViewProps> =
                     Deseja dar início a este projeto?
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Ao aprovar, você autoriza formalmente a Help Ideias Digitais a mobilizar a equipe.
+                    Ao aprovar, você autoriza formalmente a Agência Help a mobilizar a equipe.
                   </p>
                 </div>
 
@@ -827,7 +827,7 @@ export const PublicBudgetProposalView: React.FC<PublicBudgetProposalViewProps> =
       <footer className="w-full bg-white border-t border-slate-200 py-6 px-4 text-center text-xs text-slate-400 space-y-1.5 mt-auto print:hidden">
         <div className="flex items-center justify-center gap-2">
           <HelpLogo variant="icon" className="w-5 h-5 opacity-70" />
-          <span className="font-bold text-[#142142]">Help Ideias Digitais</span>
+          <span className="font-bold text-[#142142]">Agência Help</span>
           <span>•</span>
           <span>Inovação, Performance & Design de Alto Impacto</span>
         </div>
@@ -979,7 +979,7 @@ export const PublicBudgetProposalView: React.FC<PublicBudgetProposalViewProps> =
                     className="mt-0.5 rounded text-[#fab518] focus:ring-[#fab518] cursor-pointer"
                   />
                   <span className="text-[11px] text-amber-950 font-medium leading-relaxed">
-                    Declaro que revisei o escopo, cronograma e valores propostos e autorizo o início dos serviços pela Help Ideias Digitais.
+                    Declaro que revisei o escopo, cronograma e valores propostos e autorizo o início dos serviços pela Agência Help.
                   </span>
                 </label>
               </div>

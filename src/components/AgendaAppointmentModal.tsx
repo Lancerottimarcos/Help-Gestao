@@ -506,7 +506,7 @@ export const AgendaAppointmentModal: React.FC<AgendaAppointmentModalProps> = ({
                     type="text"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    placeholder="Ex: Sala de Reuniões 01 • Help Ideias Digitais"
+                    placeholder="Ex: Sala de Reuniões 01 • Agência Help"
                     className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-[#142142] dark:text-white focus:outline-none focus:border-[#fab518]"
                   />
                 </div>

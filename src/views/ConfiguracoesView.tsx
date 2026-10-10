@@ -91,11 +91,11 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      name: 'Help Ideias Digitais',
-      email: 'contato@helpideiasdigitais.com.br',
+      name: 'Agência Help',
+      email: 'contato@agenciahelp.com.br',
       phone: '(11) 98765-4321',
-      website: 'https://app.helpideiasdigitais.com.br',
-      pixKey: 'financeiro@helpideiasdigitais.com.br',
+      website: 'https://app.agenciahelp.com.br',
+      pixKey: 'financeiro@agenciahelp.com.br',
       cnpj: '45.892.102/0001-90',
       address: 'São Paulo - SP, Brasil',
       directApproval: true,
@@ -108,11 +108,11 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
   });
 
   // Agency info form fields
-  const [agencyName, setAgencyName] = useState(agencyInfo.name || 'Help Ideias Digitais');
-  const [agencyEmail, setAgencyEmail] = useState(agencyInfo.email || 'contato@helpideiasdigitais.com.br');
+  const [agencyName, setAgencyName] = useState(agencyInfo.name || 'Agência Help');
+  const [agencyEmail, setAgencyEmail] = useState(agencyInfo.email || 'contato@agenciahelp.com.br');
   const [agencyPhone, setAgencyPhone] = useState(agencyInfo.phone || '(11) 98765-4321');
-  const [agencyWebsite, setAgencyWebsite] = useState(agencyInfo.website || 'https://app.helpideiasdigitais.com.br');
-  const [agencyPixKey, setAgencyPixKey] = useState(agencyInfo.pixKey || 'financeiro@helpideiasdigitais.com.br');
+  const [agencyWebsite, setAgencyWebsite] = useState(agencyInfo.website || 'https://app.agenciahelp.com.br');
+  const [agencyPixKey, setAgencyPixKey] = useState(agencyInfo.pixKey || 'financeiro@agenciahelp.com.br');
   const [agencyCnpj, setAgencyCnpj] = useState(agencyInfo.cnpj || '45.892.102/0001-90');
   const [agencyAddress, setAgencyAddress] = useState(agencyInfo.address || 'São Paulo - SP, Brasil');
 
@@ -463,7 +463,7 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
                 Configurações & Governança
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                Gerencie o perfil institucional da <strong>Help Ideias Digitais</strong>, conexão Supabase em nuvem, diretrizes do Kanban e políticas de segurança.
+                Gerencie o perfil institucional da <strong>Agência Help</strong>, conexão Supabase em nuvem, diretrizes do Kanban e políticas de segurança.
               </p>
             </div>
           </div>
@@ -1145,7 +1145,7 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({
                   type="text"
                   value={agencyName}
                   onChange={(e) => setAgencyName(e.target.value)}
-                  placeholder="Ex: Help Ideias Digitais"
+                  placeholder="Ex: Agência Help"
                   className="w-full bg-[#f8fafc] dark:bg-slate-850 text-xs sm:text-sm font-bold text-[#142142] dark:text-white px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
                 />
               </div>

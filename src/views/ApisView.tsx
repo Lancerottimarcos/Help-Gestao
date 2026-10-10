@@ -314,7 +314,7 @@ Telefone: ${est?.ddd1 && est?.telefone1 ? `(${est.ddd1}) ${est.telefone1}` : 'N�
 E-mail: ${est?.email || 'Não cadastrado'}
 Atividade Principal (CNAE): [${est?.atividade_principal?.id || ''}] ${est?.atividade_principal?.descricao || ''}
 Quadro Societário (QSA): ${sociosList}
-Fonte: Base Pública Oficial da Receita Federal via API Help Ideias Digitais (${new Date().toLocaleDateString('pt-BR')})`;
+Fonte: Base Pública Oficial da Receita Federal via API Agência Help (${new Date().toLocaleDateString('pt-BR')})`;
   }, [result, cleanResultCnpj, companyAge, fullAddress]);
 
   // Ação de Auto-Preenchimento e Onboarding de Cliente
@@ -1106,7 +1106,7 @@ Fonte: Base Pública Oficial da Receita Federal via API Help Ideias Digitais (${
                   Infraestrutura de APIs Conectadas
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Visão em tempo real dos serviços e integrações ativas no sistema Help Ideias Digitais
+                  Visão em tempo real dos serviços e integrações ativas no sistema Agência Help
                 </p>
               </div>
 

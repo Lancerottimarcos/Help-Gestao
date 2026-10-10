@@ -292,7 +292,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
   const handleCopyMonthPauta = () => {
     const lines = [
       `📅 PAUTA DE DATAS COMEMORATIVAS - ${MONTH_NAMES_PT[selectedMonth - 1].toUpperCase()} ${selectedYear}`,
-      `Help Ideias Digitais • Planejamento Estratégico`,
+      `Agência Help • Planejamento Estratégico`,
       `--------------------------------------------------`,
       '',
     ];
@@ -317,10 +317,10 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
     let icsContent = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//Help Ideias Digitais//Datas Comemorativas 2026//PT',
+      'PRODID:-//Agência Help//Datas Comemorativas 2026//PT',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
-      'X-WR-CALNAME:Datas Comemorativas 2026 - Help Ideias',
+      'X-WR-CALNAME:Datas Comemorativas 2026 - Agência Help',
     ];
 
     const datesToExport = filteredMonthDates.length > 0 ? filteredMonthDates : allDates;
@@ -1171,7 +1171,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
                   Adicionar Data Comemorativa
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Cadastre uma data exclusiva para as marcas e clientes da Help Ideias Digitais
+                  Cadastre uma data exclusiva para as marcas e clientes da Agência Help
                 </p>
               </div>
               <button

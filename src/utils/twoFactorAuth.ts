@@ -1,5 +1,5 @@
 // Two-Factor Authentication (2FA) & One-Time Password (OTP) Engine
-// Help Ideias Digitais - Multi-Layer Cyber Security & Sensitive Action Guard
+// Agência Help - Multi-Layer Cyber Security & Sensitive Action Guard
 
 import { addSecurityLog, getSecurityConfig, saveSecurityConfig } from './securityProtocols';
 

@@ -49,15 +49,15 @@ export const ShareProposalModal: React.FC<ShareProposalModalProps> = ({
   const clientEmail = proposal.clientEmail || client?.email || '';
 
   // Formatted WhatsApp message for high conversion
-  const whatsappMessage = `Olá, *${clientContactName}*! Tudo bem? 🚀\n\nAqui é da equipe da *Help Ideias Digitais*.\n\nPreparamos a proposta comercial personalizada para o projeto *${proposal.projectName}* (Código: *${proposal.code}*).\n\n💰 *Valor Total:* R$ ${proposal.totalValue.toLocaleString('pt-BR')},00\n📅 *Validade:* ${proposal.validUntil ? new Date(proposal.validUntil).toLocaleDateString('pt-BR') : '15 dias'}\n\nVocê pode conferir todos os detalhes do escopo, entregáveis e prazos e aprovar com apenas um clique pelo nosso link seguro:\n👉 ${publicUrl}\n\nQualquer dúvida estou à disposição!`;
+  const whatsappMessage = `Olá, *${clientContactName}*! Tudo bem? 🚀\n\nAqui é da equipe da *Agência Help*.\n\nPreparamos a proposta comercial personalizada para o projeto *${proposal.projectName}* (Código: *${proposal.code}*).\n\n💰 *Valor Total:* R$ ${proposal.totalValue.toLocaleString('pt-BR')},00\n📅 *Validade:* ${proposal.validUntil ? new Date(proposal.validUntil).toLocaleDateString('pt-BR') : '15 dias'}\n\nVocê pode conferir todos os detalhes do escopo, entregáveis e prazos e aprovar com apenas um clique pelo nosso link seguro:\n👉 ${publicUrl}\n\nQualquer dúvida estou à disposição!`;
 
   const encodedWhatsappUrl = clientPhone
     ? `https://api.whatsapp.com/send?phone=55${clientPhone.replace(/^55/, '')}&text=${encodeURIComponent(whatsappMessage)}`
     : `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappMessage)}`;
 
   // Email mailto URL
-  const emailSubject = `Proposta Comercial ${proposal.code} - ${proposal.projectName} | Help Ideias Digitais`;
-  const emailBody = `Olá, ${clientContactName},\n\nSegue o link exclusivo da proposta comercial da Help Ideias Digitais referente ao projeto "${proposal.projectName}" (Código ${proposal.code}).\n\nValor: R$ ${proposal.totalValue.toLocaleString('pt-BR')},00\n\nAcesse o link abaixo para visualizar a proposta completa e realizar a aprovação online:\n${publicUrl}\n\nAtenciosamente,\nEquipe Help Ideias Digitais\nwww.ideiasdigitais.com.br`;
+  const emailSubject = `Proposta Comercial ${proposal.code} - ${proposal.projectName} | Agência Help`;
+  const emailBody = `Olá, ${clientContactName},\n\nSegue o link exclusivo da proposta comercial da Agência Help referente ao projeto "${proposal.projectName}" (Código ${proposal.code}).\n\nValor: R$ ${proposal.totalValue.toLocaleString('pt-BR')},00\n\nAcesse o link abaixo para visualizar a proposta completa e realizar a aprovação online:\n${publicUrl}\n\nAtenciosamente,\nEquipe Agência Help`;
   const mailtoUrl = `mailto:${clientEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
   const handleCopyLink = () => {

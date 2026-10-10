@@ -88,11 +88,11 @@ export const HelpLogo: React.FC<HelpLogoProps> = ({
       <div 
         onClick={onClick}
         className={`relative flex items-center justify-center cursor-pointer select-none ${className}`}
-        title="Help Ideias Digitais"
+        title="Agência Help"
       >
         <img
           src={imgError ? '/icone-help.png' : iconSrc}
-          alt="Help Ideias Digitais"
+          alt="Agência Help"
           className="w-8 h-8 object-contain transition-transform duration-200 hover:scale-105 rounded-lg"
           onError={() => setImgError(true)}
           referrerPolicy="no-referrer"
@@ -117,12 +117,12 @@ export const HelpLogo: React.FC<HelpLogoProps> = ({
     <div 
       onClick={onClick}
       className={`inline-flex items-center cursor-pointer select-none transition-opacity duration-200 hover:opacity-90 ${className}`}
-      title="Help Ideias Digitais"
+      title="Agência Help"
     >
       <img
         id="sidebar-logo-img"
         src={imgSrc}
-        alt="Help Ideias Digitais"
+        alt="Agência Help"
         className={`${heightClasses[size]} w-auto object-contain object-left max-w-[195px] transition-all duration-200`}
         onError={() => setImgError(true)}
         referrerPolicy="no-referrer"

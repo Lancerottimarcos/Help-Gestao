@@ -207,7 +207,7 @@ export const ClientBirthdaysSection: React.FC<ClientBirthdaysSectionProps> = ({
   const generateMessage = (client: Client, template: 'festivo' | 'corporativo' | 'bonus') => {
     const contact = client.contactName || client.name.split(' ')[0];
     const company = client.companyName || client.name;
-    const agencyName = 'Ideias Digitais';
+    const agencyName = 'Agência Help';
 
     if (template === 'festivo') {
       return `Olá, ${contact}! 🎂🎉\n\nToda a equipe da ${agencyName} passa por aqui com muito carinho para te desejar um Feliz Aniversário!\n\nQue este novo ciclo traga ainda mais saúde, realizações e conquistas incríveis para você e para a ${company}. Parabéns pelo seu dia! ✨🎈`;

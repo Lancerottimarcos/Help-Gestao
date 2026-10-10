@@ -31,8 +31,8 @@ export const DomainPublicationGuideCard: React.FC<DomainPublicationGuideCardProp
   const [backupSuccess, setBackupSuccess] = useState(false);
 
   const nginxConfigCode = `# ==============================================================================
-# Help Ideias Digitais - Configuração Nginx de Alta Segurança para Produção
-# Arquivo: /etc/nginx/sites-available/help-ideias-digitais.conf
+# Agência Help - Configuração Nginx de Alta Segurança para Produção
+# Arquivo: /etc/nginx/sites-available/agencia-help.conf
 # ==============================================================================
 
 # 1. Redirecionamento Forçado HTTP (Porta 80) para HTTPS (Porta 443)

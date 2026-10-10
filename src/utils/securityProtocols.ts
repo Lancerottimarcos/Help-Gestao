@@ -1,5 +1,5 @@
 // Security Protocols & Real-Time Cyber Defense Engine
-// Help Ideias Digitais - Anti-Intrusion, Antivirus, and Malware Prevention Layer
+// Agência Help - Anti-Intrusion, Antivirus, and Malware Prevention Layer
 
 import { TeamMember, MemberPermissions, Client } from '../types';
 import { initialTeamMembers, initialClients } from '../data/mockData';

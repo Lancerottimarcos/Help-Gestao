@@ -135,7 +135,7 @@ const DEFAULT_NOTIFICATIONS: AgencyNotification[] = [
 const PAGE_TITLES: Record<PageId, { title: string; subtitle: string }> = {
   inicio: {
     title: 'Visão Geral',
-    subtitle: 'Acompanhe as métricas de produção e financeiro da Help Ideias Digitais',
+    subtitle: 'Acompanhe as métricas de produção e financeiro da Agência Help',
   },
   clientes: {
     title: 'Carteira de Clientes',
@@ -167,7 +167,7 @@ const PAGE_TITLES: Record<PageId, { title: string; subtitle: string }> = {
   },
   configuracoes: {
     title: 'Configurações do Sistema',
-    subtitle: 'Preferências da Help Ideias Digitais, tags e integrações',
+    subtitle: 'Preferências da Agência Help, tags e integrações',
   },
   'portal-cliente': {
     title: 'Portal do Cliente & Aprovações',
