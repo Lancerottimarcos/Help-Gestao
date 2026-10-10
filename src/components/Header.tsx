@@ -43,38 +43,82 @@ interface HeaderProps {
   clientsCount?: number;
 }
 
-const STORAGE_KEY = 'help_agency_notifications_v2';
+const STORAGE_KEY = 'help_agency_notifications_v3';
+
+const SAMPLE_APPROVAL_NOTIFICATIONS: AgencyNotification[] = [
+  {
+    id: 'notif-client-ajuste-1',
+    title: '✏️ Ajuste Solicitado: Traga Transportes',
+    message: 'O cliente solicitou alterações no material "Carrossel Institucional Logística": "Por favor, alterar a cor do botão na lâmina 3 e atualizar o telefone do rodapé". Peça retornada para Produção.',
+    timestamp: 'Hoje, 11:20',
+    type: 'approval',
+    subType: 'client_change_request',
+    read: false,
+    targetPage: 'aprovacoes',
+    actionLabel: 'Ver Ajustes no Portal',
+    clientName: 'Traga Transportes',
+    feedback: 'Por favor, alterar a cor do botão na lâmina 3 e atualizar o telefone do rodapé',
+  },
+  {
+    id: 'notif-client-aprovado-1',
+    title: '✅ Material Aprovado: Zoppellari Visual',
+    message: 'O cliente aprovou o material "Post Lançamento Linha 2026" diretamente pelo Portal do Cliente. Demanda transferida para Agendamento e publicação.',
+    timestamp: 'Hoje, 10:45',
+    type: 'approval',
+    subType: 'client_approved',
+    read: false,
+    targetPage: 'aprovacoes',
+    actionLabel: 'Ver Agendamento',
+    clientName: 'Zoppellari Visual',
+  },
+  {
+    id: 'notif-client-ajuste-2',
+    title: '✏️ Ajuste Solicitado: Fox Combustíveis',
+    message: 'O cliente pediu ajuste no criativo "Campanha Abasteça e Ganhe": "Trocar o desconto de 10% para 15% na legenda e na lâmina principal".',
+    timestamp: 'Ontem, 16:30',
+    type: 'approval',
+    subType: 'client_change_request',
+    read: false,
+    targetPage: 'aprovacoes',
+    actionLabel: 'Ver Ajustes no Portal',
+    clientName: 'Fox Combustíveis',
+    feedback: 'Trocar o desconto de 10% para 15% na legenda e na lâmina principal',
+  },
+  {
+    id: 'notif-client-aprovado-2',
+    title: '✅ Material Aprovado: Supera Reabilitação',
+    message: 'O cliente aprovou o criativo "Vídeo Dicas Postura no Trabalho". Demanda pronta e autorizada para publicação.',
+    timestamp: 'Ontem, 14:10',
+    type: 'approval',
+    subType: 'client_approved',
+    read: true,
+    targetPage: 'aprovacoes',
+    actionLabel: 'Ver Agendamento',
+    clientName: 'Supera Reabilitação',
+  },
+];
 
 const DEFAULT_NOTIFICATIONS: AgencyNotification[] = [
+  ...SAMPLE_APPROVAL_NOTIFICATIONS,
   {
     id: 'notif-sec-1',
     title: 'Autenticação 2FA & Protocolo Antifraude',
     message: 'Ações sensíveis como exclusão de múltiplos clientes ou faturas e alterações globais agora exigem verificação 2FA temporária.',
-    timestamp: 'Agora mesmo',
+    timestamp: 'Ontem, 12:00',
     type: 'security',
-    read: false,
+    read: true,
     targetPage: 'configuracoes',
     actionLabel: 'Ver Segurança',
   },
   {
-    id: 'notif-sec-2',
-    title: 'Varredura Antivírus & Sandbox Ativa',
-    message: 'Módulo de quarentena operacional para proteger arquivos e sanitizar anexos contra malwares e injeções.',
-    timestamp: 'Hoje, 10:15',
-    type: 'security',
-    read: false,
-    targetPage: 'configuracoes',
-    actionLabel: 'Ver Logs',
-  },
-  {
     id: 'notif-1',
     title: 'Sistema Pronto para Operação',
-    message: 'A base de clientes foi inicializada limpa. Você já pode cadastrar seus clientes reais e iniciar as operações da agência.',
+    message: 'A base da Agência Help está ativa e pronta para produção e gestão de clientes.',
     timestamp: 'Hoje, 09:00',
     type: 'system',
-    read: false,
+    read: true,
     targetPage: 'clientes',
-    actionLabel: 'Cadastrar Cliente',
+    actionLabel: 'Ver Clientes',
   },
   {
     id: 'notif-2',
@@ -82,29 +126,9 @@ const DEFAULT_NOTIFICATIONS: AgencyNotification[] = [
     message: 'Mais de 100 datas comemorativas, feriados e ganchos prontos para criar demandas e posts para seus clientes.',
     timestamp: 'Hoje, 08:30',
     type: 'calendar',
-    read: false,
+    read: true,
     targetPage: 'calendario',
     actionLabel: 'Ver Calendário',
-  },
-  {
-    id: 'notif-3',
-    title: 'Portal do Cliente & Aprovações',
-    message: 'Links exclusivos prontos para envio via WhatsApp ou link direto para aprovação ágil de artes e cópias.',
-    timestamp: 'Ontem, 17:00',
-    type: 'approval',
-    read: true,
-    targetPage: 'portal-cliente',
-    actionLabel: 'Abrir Portal',
-  },
-  {
-    id: 'notif-4',
-    title: 'Quadro Kanban de Demandas',
-    message: 'Acompanhe todo o pipeline: Ideias, Produção, Revisão Interna, Em Aprovação e Agendados.',
-    timestamp: 'Ontem, 14:15',
-    type: 'demand',
-    read: true,
-    targetPage: 'demandas',
-    actionLabel: 'Ver Kanban',
   },
 ];
 
@@ -206,13 +230,27 @@ export const Header: React.FC<HeaderProps> = ({
     : (PAGE_TITLES[currentPage] || PAGE_TITLES.inicio);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'security'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'approvals' | 'unread' | 'security'>('all');
   const [notifications, setNotifications] = useState<AgencyNotification[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Garante que notificações essenciais de aprovação e ajuste de material estejam sempre presentes
+          const hasApproval = parsed.some((n: AgencyNotification) => n.subType === 'client_approved' || (n.type === 'approval' && n.title.includes('Aprovad')));
+          const hasChangeReq = parsed.some((n: AgencyNotification) => n.subType === 'client_change_request' || n.title.includes('Ajuste Solicitado'));
+          
+          let merged = [...parsed];
+          if (!hasApproval || !hasChangeReq) {
+            SAMPLE_APPROVAL_NOTIFICATIONS.forEach((sample) => {
+              if (!merged.some((m) => m.id === sample.id || m.title === sample.title)) {
+                merged.unshift(sample);
+              }
+            });
+          }
+          return merged;
+        }
       }
     } catch {}
     return DEFAULT_NOTIFICATIONS;
@@ -283,6 +321,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   const unreadCount = displayNotifications.filter((n) => !n.read).length;
   const securityCount = displayNotifications.filter((n) => n.type === 'security').length;
+  const approvalsCount = displayNotifications.filter(
+    (n) => n.type === 'approval' || n.subType === 'client_approved' || n.subType === 'client_change_request' || n.title.includes('Ajuste') || n.title.includes('Aprovad')
+  ).length;
 
   const [browserNotifPermission, setBrowserNotifPermission] = useState<string>(() => getNotificationPermission());
 
@@ -327,6 +368,9 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const filteredNotifications = displayNotifications.filter((n) => {
+    if (activeFilter === 'approvals') {
+      return n.type === 'approval' || n.subType === 'client_approved' || n.subType === 'client_change_request' || n.title.includes('Ajuste') || n.title.includes('Aprovad');
+    }
     if (activeFilter === 'unread') return !n.read;
     if (activeFilter === 'security') return n.type === 'security';
     return true;
@@ -392,7 +436,20 @@ export const Header: React.FC<HeaderProps> = ({
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
             }`}
           >
-            Todas ({notifications.length})
+            Todas ({displayNotifications.length})
+          </button>
+          <button
+            type="button"
+            id="tab-notif-approvals"
+            onClick={() => setActiveFilter('approvals')}
+            className={`px-2 sm:px-2.5 py-1 rounded-lg font-bold text-[10px] sm:text-[11px] whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 touch-manipulation ${
+              activeFilter === 'approvals'
+                ? 'bg-[#fab518] text-[#142142] font-black shadow-2xs'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+            }`}
+          >
+            <Sparkles size={11} className={activeFilter === 'approvals' ? 'text-[#142142]' : 'text-amber-500'} />
+            <span>Aprovações & Ajustes ({approvalsCount})</span>
           </button>
           <button
             type="button"
@@ -494,71 +551,113 @@ export const Header: React.FC<HeaderProps> = ({
               <CheckCircle2 size={20} />
             </div>
             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-              {activeFilter === 'unread' ? 'Tudo lido por aqui!' : activeFilter === 'security' ? 'Nenhum alerta de segurança registrado' : 'Nenhuma notificação no momento'}
+              {activeFilter === 'unread'
+                ? 'Tudo lido por aqui!'
+                : activeFilter === 'approvals'
+                ? 'Nenhuma notificação de aprovação ou ajuste encontrada'
+                : activeFilter === 'security'
+                ? 'Nenhum alerta de segurança registrado'
+                : 'Nenhuma notificação no momento'}
             </p>
             <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-              Novos avisos da equipe, aprovações de clientes, 2FA e prazos de campanhas aparecerão aqui automaticamente.
+              Novos avisos da equipe, aprovações de clientes, pedidos de ajuste em materiais e prazos aparecerão aqui automaticamente.
             </p>
           </div>
         ) : (
-          filteredNotifications.map((n) => (
-            <div
-              key={n.id}
-              onClick={() => handleNotificationClick(n)}
-              className={`
-                p-3 sm:p-4 transition-colors cursor-pointer group flex items-start gap-2.5 sm:gap-3 touch-manipulation
-                ${!n.read 
-                  ? 'bg-[#fab518]/[0.05] dark:bg-[#fab518]/[0.08] hover:bg-[#fab518]/[0.1]' 
-                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                }
-              `}
-            >
-              {/* Icon */}
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 mt-0.5 border border-slate-200/60 dark:border-slate-700/60">
-                {getTypeIcon(n.type)}
-              </div>
+          filteredNotifications.map((n) => {
+            const isChangeRequest = n.subType === 'client_change_request' || n.title.includes('Ajuste Solicitado');
+            const isApproved = n.subType === 'client_approved' || (n.type === 'approval' && n.title.includes('Aprovad'));
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <h4 className={`text-xs font-bold truncate ${!n.read ? 'text-[#142142] dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>
-                    {n.title}
-                  </h4>
-                  {!n.read && (
-                    <span className="w-2 h-2 rounded-full bg-[#fab518] shrink-0" />
+            return (
+              <div
+                key={n.id}
+                onClick={() => handleNotificationClick(n)}
+                className={`
+                  p-3 sm:p-4 transition-colors cursor-pointer group flex items-start gap-2.5 sm:gap-3 touch-manipulation
+                  ${!n.read 
+                    ? 'bg-[#fab518]/[0.05] dark:bg-[#fab518]/[0.08] hover:bg-[#fab518]/[0.1]' 
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }
+                `}
+              >
+                {/* Icon */}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border ${
+                  isChangeRequest
+                    ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
+                    : isApproved
+                    ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700/60'
+                }`}>
+                  {isChangeRequest ? (
+                    <Clock size={16} className="text-amber-600 dark:text-amber-400 stroke-[2.2]" />
+                  ) : isApproved ? (
+                    <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 stroke-[2.2]" />
+                  ) : (
+                    getTypeIcon(n.type)
                   )}
                 </div>
 
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed mb-1.5 sm:mb-2 line-clamp-2">
-                  {n.message}
-                </p>
-
-                <div className="flex items-center justify-between text-[10px] text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <Clock size={11} />
-                    <span>{n.timestamp}</span>
-                  </span>
-
-                  <div className="flex items-center gap-2">
-                    {n.actionLabel && (
-                      <span className="font-bold text-[#142142] dark:text-[#fab518] hover:underline flex items-center gap-0.5">
-                        <span>{n.actionLabel}</span>
-                        <ExternalLink size={10} />
-                      </span>
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <h4 className={`text-xs font-bold truncate ${!n.read ? 'text-[#142142] dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                        {n.title}
+                      </h4>
+                      {isChangeRequest && (
+                        <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
+                          Ajuste Solicitado
+                        </span>
+                      )}
+                      {isApproved && (
+                        <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+                          Aprovado
+                        </span>
+                      )}
+                    </div>
+                    {!n.read && (
+                      <span className="w-2 h-2 rounded-full bg-[#fab518] shrink-0" />
                     )}
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteNotification(n.id, e)}
-                      className="opacity-70 sm:opacity-0 group-hover:opacity-100 hover:text-red-500 transition-opacity p-1 touch-manipulation"
-                      title="Remover"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed mb-1.5 sm:mb-2 line-clamp-2">
+                    {n.message}
+                  </p>
+
+                  {/* Feedback Quote Highlight if client asked for adjustments */}
+                  {n.feedback && (
+                    <div className="mb-2 p-2 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/20 text-[10.5px] text-amber-900 dark:text-amber-200 italic font-medium leading-tight">
+                      💬 “{n.feedback}”
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Clock size={11} />
+                      <span>{n.timestamp}</span>
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {n.actionLabel && (
+                        <span className="font-extrabold text-[#142142] dark:text-[#fab518] hover:underline flex items-center gap-0.5">
+                          <span>{n.actionLabel}</span>
+                          <ExternalLink size={10} />
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteNotification(n.id, e)}
+                        className="opacity-70 sm:opacity-0 group-hover:opacity-100 hover:text-red-500 transition-opacity p-1 touch-manipulation"
+                        title="Remover"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

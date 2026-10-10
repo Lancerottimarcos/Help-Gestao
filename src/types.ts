@@ -387,6 +387,10 @@ export interface AgencyNotification {
   read: boolean;
   targetPage?: PageId;
   actionLabel?: string;
+  demandId?: string;
+  clientName?: string;
+  subType?: 'client_approved' | 'client_change_request';
+  feedback?: string;
 }
 
 export interface ChatMessage {

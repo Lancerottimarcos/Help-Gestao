@@ -1280,7 +1280,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
               <p className="text-xs text-slate-400">Instruções de tom de voz, regras da marca e sugestões de pautas</p>
             </div>
             <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-xs">
-              Help Ideias Digitais
+              Agência Help
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
@@ -1319,7 +1319,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
             {clients.slice(0, 6).map((c) => {
               const clientPending = scopedDemands.filter(d => (d.client || '').toLowerCase() === c.name.toLowerCase() && (d.columnId === 'aprovacao' || d.approvalStatus === 'pendente')).length;
               const phoneClean = (c.phone || '11999999999').replace(/[^0-9]/g, '');
-              const waUrl = `https://wa.me/55${phoneClean}?text=${encodeURIComponent(`Olá ${c.name}! Tudo bem? Temos ${clientPending} materiais no seu Portal de Aprovação da Help Ideias Digitais para você conferir.`)}`;
+              const waUrl = `https://wa.me/55${phoneClean}?text=${encodeURIComponent(`Olá ${c.name}! Tudo bem? Temos ${clientPending} materiais no seu Portal de Aprovação da Agência Help para você conferir.`)}`;
 
               return (
                 <div key={c.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
@@ -1697,7 +1697,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-500">
-              Descreva com detalhes o que a equipe da Help Ideias Digitais deve alterar em <strong>"{feedbackDemand.title}"</strong>:
+              Descreva com detalhes o que a equipe da Agência Help deve alterar em <strong>"{feedbackDemand.title}"</strong>:
             </p>
 
             <form onSubmit={handleSendFeedback} className="space-y-3">
@@ -2052,7 +2052,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
                 )}
 
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-[11px] font-black text-[#142142] dark:text-[#fab518]">Help Ideias Digitais</span>
+                  <span className="text-[11px] font-black text-[#142142] dark:text-[#fab518]">Agência Help</span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-bold">Portal Ativo</span>
                 </div>
 

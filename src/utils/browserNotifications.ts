@@ -259,6 +259,31 @@ export function notifyDemandApproved(demand: {
     demandId: demand.id,
     clientName: demand.client,
   });
+
+  if (typeof window !== 'undefined') {
+    const notif = {
+      id: `notif-app-${demand.id}-${Date.now()}`,
+      title: `✅ Material Aprovado: ${demand.client}`,
+      message: `O cliente ${demand.client} aprovou o material "${demand.title}". Pronto para agendamento e publicação.`,
+      timestamp: 'Agora mesmo',
+      type: 'approval' as const,
+      read: false,
+      targetPage: 'demandas' as const,
+      actionLabel: 'Ver no Kanban',
+      demandId: demand.id,
+      clientName: demand.client,
+      subType: 'client_approved' as const,
+    };
+    try {
+      const key = 'help_agency_notifications_v3';
+      const stored = localStorage.getItem(key);
+      const parsed = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(parsed)) {
+        localStorage.setItem(key, JSON.stringify([notif, ...parsed.filter((p: any) => p.id !== notif.id)]));
+      }
+    } catch {}
+    window.dispatchEvent(new CustomEvent('help_agency_notification', { detail: notif }));
+  }
 }
 
 /**
@@ -300,7 +325,7 @@ export function notifyDemandChangeRequested(demand: {
   const prefs = getNotificationPreferences();
   if (!prefs.notifyOnChangeRequest) return;
 
-  const title = `✏️ Alteração Solicitada: ${demand.client}`;
+  const title = `✏️ Ajuste Solicitado: ${demand.client}`;
   const feedbackText = demand.feedback ? ` Ajuste: "${demand.feedback}".` : '';
   const body = `O cliente ${demand.client} solicitou modificações na demanda "${demand.title}".${feedbackText}`;
 
@@ -311,6 +336,32 @@ export function notifyDemandChangeRequested(demand: {
     demandId: demand.id,
     clientName: demand.client,
   });
+
+  if (typeof window !== 'undefined') {
+    const notif = {
+      id: `notif-adj-${demand.id}-${Date.now()}`,
+      title: `✏️ Ajuste Solicitado: ${demand.client}`,
+      message: `O cliente ${demand.client} solicitou alterações no material "${demand.title}": "${demand.feedback || 'Ajustes no criativo'}"`,
+      timestamp: 'Agora mesmo',
+      type: 'approval' as const,
+      read: false,
+      targetPage: 'demandas' as const,
+      actionLabel: 'Ver Ajustes',
+      demandId: demand.id,
+      clientName: demand.client,
+      subType: 'client_change_request' as const,
+      feedback: demand.feedback,
+    };
+    try {
+      const key = 'help_agency_notifications_v3';
+      const stored = localStorage.getItem(key);
+      const parsed = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(parsed)) {
+        localStorage.setItem(key, JSON.stringify([notif, ...parsed.filter((p: any) => p.id !== notif.id)]));
+      }
+    } catch {}
+    window.dispatchEvent(new CustomEvent('help_agency_notification', { detail: notif }));
+  }
 }
 
 /**
