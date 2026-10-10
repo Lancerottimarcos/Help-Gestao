@@ -71,51 +71,9 @@ export const initialTeamMembers: TeamMember[] = [
   },
 ];
 
-export const initialClients: Client[] = [
-  {
-    id: 'cli-portal-pub',
-    name: 'Portal Publicitário',
-    companyName: 'Portal Publicitário',
-    segment: 'Comunicação & Mídia',
-    contactName: 'Equipe de Conteúdo',
-    contactRole: 'Gerente de Contas',
-    email: 'contato@portalpublicitario.com.br',
-    phone: '(21) 98765-4321',
-    avatar: '',
-    coverColor: '#f97316',
-    status: 'Ativo',
-    monthlyFee: 3500,
-    services: ['Social Media', 'Campanhas'],
-    activeDemandsCount: 1,
-    joinedDate: '12/01/2026',
-    city: 'Rio de Janeiro',
-    state: 'RJ',
-  },
-];
+export const initialClients: Client[] = [];
 
-export const initialDemands: DemandItem[] = [
-  {
-    id: 'DEM-FLAMENGO-01',
-    title: 'Flamengo: camisa feita pelo público',
-    client: 'Portal Publicitário',
-    clientId: 'cli-portal-pub',
-    clientProject: 'Concurso Uniforme Torcida',
-    description: 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.',
-    dueDate: '12/10 às 18:00',
-    type: 'Feed',
-    serviceCategory: 'Social Media',
-    priority: 'alta',
-    priorityBars: 3,
-    columnId: 'aprovacao',
-    approvalStatus: 'pendente',
-    assignee: {
-      name: 'Marcos Lancerotti',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256',
-    },
-    commentsCount: 1,
-    attachmentsCount: 3,
-  },
-];
+export const initialDemands: DemandItem[] = [];
 
 export const initialRecentActivities: ClientActivity[] = [];
 

@@ -16,7 +16,7 @@ const FIREBASE_CONFIG_FILE = path.join(process.cwd(), "firebase-applet-config.js
 const FIRESTORE_STATUS_FILE = path.join(DATA_DIR, "firestore-status.json");
 
 let firestoreDb: any = null;
-let isMemoryQuotaExhausted = true; // Mantém ativo o modo local resiliente para evitar loops de estouro de cota diária do Firestore
+let isMemoryQuotaExhausted = false; // Firestore ativo com persistência na nuvem e resiliência local
 
 function isFirestoreQuotaExhausted(): boolean {
   if (isMemoryQuotaExhausted) return true;
@@ -24,6 +24,14 @@ function isFirestoreQuotaExhausted(): boolean {
     if (fs.existsSync(FIRESTORE_STATUS_FILE)) {
       const data = JSON.parse(fs.readFileSync(FIRESTORE_STATUS_FILE, "utf-8"));
       if (data && data.quotaExhausted) {
+        // Se já passou mais de 24 horas desde que marcou como esgotado, tenta reativar
+        if (data.exhaustedAt && Date.now() - data.exhaustedAt > 24 * 60 * 60 * 1000) {
+          try {
+            fs.unlinkSync(FIRESTORE_STATUS_FILE);
+          } catch {}
+          isMemoryQuotaExhausted = false;
+          return false;
+        }
         isMemoryQuotaExhausted = true;
         return true;
       }
@@ -187,6 +195,23 @@ async function startServer() {
   // In-Memory Database Cache & State Manager (protege contra race-conditions e garante persistência atômica)
   let inMemoryDatabaseState: any = null;
 
+  async function syncToFirestore(payload: Record<string, any>) {
+    if (firestoreDb && !isFirestoreQuotaExhausted()) {
+      try {
+        const docRef = doc(firestoreDb, "agency_data", "main_state");
+        await setDoc(docRef, { ...payload, updatedAt: Date.now() }, { merge: true });
+      } catch (fErr: any) {
+        const msg = fErr?.message || "";
+        const code = fErr?.code || "";
+        if (code === "resource-exhausted" || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota limit exceeded") || msg.includes("Quota")) {
+          await markFirestoreQuotaExhausted();
+        } else {
+          console.warn("[Firestore Server] Aviso ao persistir no Firestore:", fErr);
+        }
+      }
+    }
+  }
+
   function getDatabaseState(): any {
     if (inMemoryDatabaseState !== null) return inMemoryDatabaseState;
     if (fs.existsSync(DB_FILE)) {
@@ -218,9 +243,92 @@ async function startServer() {
     }
   }
 
+  async function initDatabaseState() {
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        const raw = fs.readFileSync(DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+          inMemoryDatabaseState = parsed;
+          console.log("[Database Server] Carregado de data/database.json:", Object.keys(parsed));
+        }
+      } catch (e) {
+        console.error("[Database Server] Erro ao carregar data/database.json no startup:", e);
+      }
+    }
+
+    // Se a base local não tiver clientes ou demandas cadastrados, busca e hidrata do Firestore
+    if (
+      !inMemoryDatabaseState ||
+      !Array.isArray(inMemoryDatabaseState.clients) ||
+      inMemoryDatabaseState.clients.length === 0 ||
+      !Array.isArray(inMemoryDatabaseState.demands) ||
+      inMemoryDatabaseState.demands.length === 0
+    ) {
+      if (firestoreDb && !isFirestoreQuotaExhausted()) {
+        try {
+          console.log("[Database Server] Hidratando dados centrais a partir do Firestore (agency_data/main_state)...");
+          const docRef = doc(firestoreDb, "agency_data", "main_state");
+          const snap = await Promise.race([
+            getDoc(docRef),
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Timeout Firestore")), 5000))
+          ]);
+          if (snap && snap.exists()) {
+            const remote = snap.data();
+            console.log("[Database Server] Sucesso! Sincronizado do Firestore. Clientes:", remote.clients?.length, "Demandas:", remote.demands?.length, "Serviços:", remote.services?.length);
+            inMemoryDatabaseState = {
+              ...(inMemoryDatabaseState || {}),
+              ...remote,
+              clients: (Array.isArray(remote.clients) && remote.clients.length > 0) ? remote.clients : (inMemoryDatabaseState?.clients || []),
+              demands: (Array.isArray(remote.demands) && remote.demands.length > 0) ? remote.demands : (inMemoryDatabaseState?.demands || []),
+              services: (Array.isArray(remote.services) && remote.services.length > 0) ? remote.services : (inMemoryDatabaseState?.services || []),
+              updatedAt: Date.now(),
+            };
+            persistDatabaseState(inMemoryDatabaseState);
+          }
+        } catch (err) {
+          console.warn("[Database Server] Aviso ao sincronizar do Firestore no startup:", err);
+        }
+      }
+    }
+
+    if (!inMemoryDatabaseState) {
+      inMemoryDatabaseState = {};
+    }
+  }
+
   // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Cache em disco + Firestore)
   app.get("/api/database", async (_req, res) => {
-    const data = getDatabaseState();
+    let data = getDatabaseState();
+    // Se a base em memória estiver vazia de clientes ou demandas, tenta carregar do Firestore sob demanda
+    if (
+      !data ||
+      !Array.isArray(data.clients) ||
+      data.clients.length === 0 ||
+      !Array.isArray(data.demands) ||
+      data.demands.length === 0
+    ) {
+      if (firestoreDb && !isFirestoreQuotaExhausted()) {
+        try {
+          const docRef = doc(firestoreDb, "agency_data", "main_state");
+          const snap = await Promise.race([
+            getDoc(docRef),
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
+          ]);
+          if (snap && snap.exists()) {
+            const remote = snap.data();
+            data = {
+              ...data,
+              ...remote,
+              clients: (Array.isArray(remote.clients) && remote.clients.length > 0) ? remote.clients : (data?.clients || []),
+              demands: (Array.isArray(remote.demands) && remote.demands.length > 0) ? remote.demands : (data?.demands || []),
+              services: (Array.isArray(remote.services) && remote.services.length > 0) ? remote.services : (data?.services || []),
+            };
+            persistDatabaseState(data);
+          }
+        } catch {}
+      }
+    }
     return res.json({
       success: true,
       data,
@@ -272,20 +380,7 @@ async function startServer() {
       persistDatabaseState(merged);
 
       // 2. Grava de forma secundária no Google Cloud Firestore se houver cota disponível
-      if (firestoreDb && !isFirestoreQuotaExhausted()) {
-        try {
-          const docRef = doc(firestoreDb, "agency_data", "main_state");
-          await setDoc(docRef, merged, { merge: true });
-        } catch (fErr: any) {
-          const msg = fErr?.message || "";
-          const code = fErr?.code || "";
-          if (code === "resource-exhausted" || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota limit exceeded") || msg.includes("Quota")) {
-            await markFirestoreQuotaExhausted();
-          } else {
-            console.warn("[Firestore Server] Aviso ao persistir no Firestore:", fErr);
-          }
-        }
-      }
+      syncToFirestore(sanitizedUpdate).catch(() => {});
 
       res.json({ success: true, timestamp: Date.now() });
     } catch (e: any) {
@@ -301,7 +396,7 @@ async function startServer() {
     res.json({ success: true, data: demands, count: demands.length });
   });
 
-  app.post("/api/demands", (req, res) => {
+  app.post("/api/demands", async (req, res) => {
     try {
       const { demand, demands } = req.body || {};
       const current = getDatabaseState();
@@ -326,10 +421,91 @@ async function startServer() {
         updatedAt: Date.now(),
       };
       persistDatabaseState(updated);
+      syncToFirestore({ demands: currentDemands }).catch(() => {});
       res.json({ success: true, count: currentDemands.length });
     } catch (e: any) {
       console.error("Erro ao salvar demanda(s):", e);
       res.status(500).json({ success: false, error: "Falha ao gravar demanda." });
+    }
+  });
+
+  // Endpoints dedicados para Clientes
+  app.get("/api/clients", (_req, res) => {
+    const db = getDatabaseState();
+    const clients = Array.isArray(db.clients) ? db.clients : [];
+    res.json({ success: true, data: clients, count: clients.length });
+  });
+
+  app.post("/api/clients", async (req, res) => {
+    try {
+      const { client, clients } = req.body || {};
+      const current = getDatabaseState();
+      let currentClients: any[] = Array.isArray(current.clients) ? [...current.clients] : [];
+
+      if (Array.isArray(clients)) {
+        currentClients = clients;
+      } else if (client && client.id) {
+        const idx = currentClients.findIndex((c: any) => c.id === client.id);
+        if (idx >= 0) {
+          currentClients[idx] = client;
+        } else {
+          currentClients.unshift(client);
+        }
+      } else {
+        return res.status(400).json({ success: false, error: "Cliente ou lista inválida." });
+      }
+
+      const updated = {
+        ...current,
+        clients: currentClients,
+        updatedAt: Date.now(),
+      };
+      persistDatabaseState(updated);
+      syncToFirestore({ clients: currentClients }).catch(() => {});
+      res.json({ success: true, count: currentClients.length });
+    } catch (e: any) {
+      console.error("Erro ao salvar cliente(s):", e);
+      res.status(500).json({ success: false, error: "Falha ao gravar cliente." });
+    }
+  });
+
+  // Endpoints dedicados para Serviços
+  app.get("/api/services", (_req, res) => {
+    const db = getDatabaseState();
+    const services = Array.isArray(db.services) ? db.services : [];
+    res.json({ success: true, data: services, count: services.length });
+  });
+
+  app.post("/api/services", async (req, res) => {
+    try {
+      const { service, services } = req.body || {};
+      const current = getDatabaseState();
+      let currentServices: any[] = Array.isArray(current.services) ? [...current.services] : [];
+
+      if (Array.isArray(services)) {
+        currentServices = services;
+      } else if (service && service.id) {
+        const idx = currentServices.findIndex((s: any) => s.id === service.id);
+        if (idx >= 0) {
+          currentServices[idx] = service;
+        } else {
+          currentServices.unshift(service);
+        }
+      } else {
+        return res.status(400).json({ success: false, error: "Serviço ou lista inválida." });
+      }
+
+      const updated = {
+        ...current,
+        services: currentServices,
+        updatedAt: Date.now(),
+      };
+      persistDatabaseState(updated);
+      syncToFirestore({ services: currentServices }).catch(() => {});
+      res.json({ success: true, count: currentServices.length });
+    } catch (e: any) {
+      console.error("Erro ao salvar serviço(s):", e);
+      res.status(500).json({ success: false, error: "Falha ao gravar serviço." });
     }
   });
 
@@ -909,6 +1085,9 @@ async function startServer() {
       connectedClients.delete(ws);
     });
   });
+
+  // Inicializa a base de dados em memória e sincroniza do Firestore se necessário
+  await initDatabaseState();
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`[Help Ideias Server] Rodando com sucesso na porta ${PORT} (HTTP & WebSocket)`);

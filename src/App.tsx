@@ -1579,6 +1579,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
     const demandsToSave = nextDemands.length > 0 ? nextDemands : [newDemand, ...demands.filter(d => d.id !== newDemand.id)];
     serverDbService.saveDatabase({ demands: demandsToSave }, true);
+    serverDbService.saveDemandsDirectly(demandsToSave);
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
@@ -1985,6 +1986,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
     });
     const clientsToSave = updatedClients.length > 0 ? updatedClients : [newClient, ...clients.filter(c => c.id !== newClient.id)];
     serverDbService.saveDatabase({ clients: clientsToSave }, true);
+    serverDbService.saveClientsDirectly(clientsToSave);
     supabaseService.upsertClient(newClient);
   };
 
@@ -2113,6 +2115,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
     });
     const servicesToSave = updatedServices.length > 0 ? updatedServices : [newService, ...services.filter(s => s.id !== newService.id)];
     serverDbService.saveDatabase({ services: servicesToSave }, true);
+    serverDbService.saveServicesDirectly(servicesToSave);
     if (supabaseService.isConfigured()) {
       supabaseService.upsertService(newService);
     }
@@ -2131,6 +2134,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
     });
     const servicesToSave = updatedServices.length > 0 ? updatedServices : services.map((s) => (s.id === updatedService.id ? updatedService : s));
     serverDbService.saveDatabase({ services: servicesToSave }, true);
+    serverDbService.saveServicesDirectly(servicesToSave);
     if (supabaseService.isConfigured()) {
       supabaseService.upsertService(updatedService);
     }
@@ -2150,6 +2154,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
     });
     const servicesToSave = updatedServices.length > 0 ? updatedServices : services.filter(s => s.id !== serviceId);
     serverDbService.saveDatabase({ services: servicesToSave }, true);
+    serverDbService.saveServicesDirectly(servicesToSave);
     if (supabaseService.isConfigured()) {
       supabaseService.deleteService(serviceId);
     }

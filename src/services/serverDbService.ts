@@ -383,7 +383,7 @@ export const serverDbService = {
       const res = await fetch('/api/database');
       if (res.ok) {
         const json: DatabaseApiResponse = await res.json();
-        if (json.success && json.data) {
+        if (json.success && json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0) {
           return json.data;
         }
       }
@@ -394,7 +394,7 @@ export const serverDbService = {
     // Fallback de alta disponibilidade: consulta diretamente o Google Cloud Firestore
     try {
       const firestoreData = await fetchFirestoreData('agency_data', 'main_state');
-      if (firestoreData && typeof firestoreData === 'object') {
+      if (firestoreData && typeof firestoreData === 'object' && Object.keys(firestoreData).length > 0) {
         return firestoreData as AppDatabasePayload;
       }
     } catch (err) {
@@ -438,6 +438,38 @@ export const serverDbService = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ demands }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Endpoint de canal direto para persistir clientes
+   */
+  async saveClientsDirectly(clients: Client[]): Promise<boolean> {
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clients }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Endpoint de canal direto para persistir serviços
+   */
+  async saveServicesDirectly(services: Service[]): Promise<boolean> {
+    try {
+      const res = await fetch('/api/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ services }),
       });
       return res.ok;
     } catch {
