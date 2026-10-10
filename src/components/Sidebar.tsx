@@ -339,11 +339,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Users,
         },
         {
-          id: 'portal-cliente',
-          label: 'Portal do Cliente',
-          icon: LayoutGrid,
-        },
-        {
           id: 'demandas',
           label: 'Demandas',
           icon: Kanban,
@@ -362,6 +357,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'gestao' as PageId,
           label: 'Gestão',
           icon: BarChart3,
+        },
+        {
+          id: 'portal-cliente',
+          label: 'Portal do Cliente',
+          icon: LayoutGrid,
         },
         {
           id: 'comunicacao',

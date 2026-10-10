@@ -708,7 +708,7 @@ export const InicioView: React.FC<InicioViewProps> = ({
       case 'prioridades':
         return (
           <section aria-label="Demandas Prioritárias & Acesso Rápido" className="space-y-4">
-            {/* Header com título e ações */}
+            {/* Header com título */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
               <div>
                 <div className="flex items-center gap-2.5">
@@ -720,18 +720,6 @@ export const InicioView: React.FC<InicioViewProps> = ({
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Acompanhe prazos críticos, gargalos de produção e atalhos rápidos da agência
                 </p>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('demandas')}
-                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-xs font-bold text-[#142142] dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Kanban size={14} className="text-[#fab518]" />
-                  <span>Quadro Kanban</span>
-                  <ArrowUpRight size={13} className="text-slate-400" />
-                </button>
               </div>
             </div>
 
