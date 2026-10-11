@@ -986,11 +986,10 @@ export async function validateMasterCredentials(
 }> {
   const cleanUser = (userInput || '').trim().toLowerCase().replace(/^@/, '');
 
-  // Recupera equipe atualizada do localStorage ou mock
+  // Recupera equipe atualizada do localStorage como base de arranque rápido
   let team: TeamMember[] = initialTeamMembers;
-  let storedTeam: string | null = null;
   try {
-    storedTeam = localStorage.getItem('agency_team_members');
+    const storedTeam = localStorage.getItem('agency_team_members');
     if (storedTeam) {
       const parsed = JSON.parse(storedTeam);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -999,25 +998,44 @@ export async function validateMasterCredentials(
     }
   } catch {}
 
-  // Se não houver equipe no localStorage deste computador, busca da base de dados centralizada do servidor
+  // Busca SEMPRE a versão mais recente da equipe do servidor central (/api/team-members e /api/database)
+  // para garantir consistência imediata de fotos de perfil (avatares) e credenciais em novos computadores ou celulares
   let serverMasterHash: string | null = null;
-  if (!storedTeam) {
-    try {
-      const res = await fetch('/api/database');
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.data?.masterPasswordHash) {
-          serverMasterHash = json.data.masterPasswordHash;
-        }
-        if (json?.data?.teamMembers && Array.isArray(json.data.teamMembers) && json.data.teamMembers.length > 0) {
-          team = json.data.teamMembers;
-          try {
-            localStorage.setItem('agency_team_members', JSON.stringify(team));
-          } catch {}
-        }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+    const resTeam = await fetch('/api/team-members?t=' + Date.now(), {
+      cache: 'no-store',
+      signal: controller.signal,
+    }).catch(() => null);
+    clearTimeout(timer);
+
+    if (resTeam && resTeam.ok) {
+      const jsonTeam = await resTeam.json();
+      if (jsonTeam?.data && Array.isArray(jsonTeam.data) && jsonTeam.data.length > 0) {
+        team = jsonTeam.data;
+        try {
+          localStorage.setItem('agency_team_members', JSON.stringify(team));
+        } catch {}
       }
-    } catch {}
-  }
+    }
+  } catch {}
+
+  try {
+    const resDb = await fetch('/api/database?t=' + Date.now(), { cache: 'no-store' }).catch(() => null);
+    if (resDb && resDb.ok) {
+      const json = await resDb.json();
+      if (json?.data?.masterPasswordHash) {
+        serverMasterHash = json.data.masterPasswordHash;
+      }
+      if ((!team || team.length <= 1) && json?.data?.teamMembers && Array.isArray(json.data.teamMembers) && json.data.teamMembers.length > 0) {
+        team = json.data.teamMembers;
+        try {
+          localStorage.setItem('agency_team_members', JSON.stringify(team));
+        } catch {}
+      }
+    }
+  } catch {}
 
   // Localiza registro do Marcos na equipe
   const marcosMember = team.find((m) => isOwnerOrMarcos(m));

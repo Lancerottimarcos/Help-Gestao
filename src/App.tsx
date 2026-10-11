@@ -313,6 +313,15 @@ export function Layout({ children, onLogout }: LayoutProps) {
     return result;
   }, []);
 
+  const isCustomAvatar = (avatar?: string): boolean => {
+    if (!avatar || typeof avatar !== 'string') return false;
+    const trimmed = avatar.trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith('data:image/') || trimmed.startsWith('/uploads/')) return true;
+    if (trimmed.includes('photo-1534528741775')) return false; // Stock placeholder
+    return true;
+  };
+
   const getDeletedDemandIds = (): Set<string> => {
     try {
       const raw = localStorage.getItem('agency_deleted_demand_ids');
@@ -819,11 +828,30 @@ export function Layout({ children, onLogout }: LayoutProps) {
               const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
               const cleanRemote = remoteData.teamMembers!.filter((rm) => !deletedIds.has(rm.id) && !mockIds.has(rm.id));
               const localPending = prev.filter((lm) => !deletedIds.has(lm.id) && !mockIds.has(lm.id) && !remoteMap.has(lm.id));
-              const merged = deduplicateTeamMembers([...cleanRemote, ...localPending]);
+
+              const updatedRemote = cleanRemote.map((rm) => {
+                const local = prev.find((lm) => lm.id === rm.id || (isOwnerOrMarcos(lm) && isOwnerOrMarcos(rm)));
+                const isLocalCustom = isCustomAvatar(local?.avatar);
+                const isRemoteCustom = isCustomAvatar(rm.avatar);
+                const finalAvatar = isRemoteCustom ? rm.avatar : (isLocalCustom ? (local?.avatar || '') : (rm.avatar || local?.avatar || ''));
+                return {
+                  ...rm,
+                  avatar: finalAvatar,
+                };
+              });
+
+              const merged = deduplicateTeamMembers([...updatedRemote, ...localPending]);
 
               if (
                 merged.length === prev.length &&
-                merged.every((m, idx) => m.id === prev[idx]?.id && m.name === prev[idx]?.name && m.role === prev[idx]?.role)
+                merged.every((m, idx) =>
+                  m.id === prev[idx]?.id &&
+                  m.name === prev[idx]?.name &&
+                  m.role === prev[idx]?.role &&
+                  m.avatar === prev[idx]?.avatar &&
+                  m.status === prev[idx]?.status &&
+                  m.username === prev[idx]?.username
+                )
               ) {
                 return prev;
               }
@@ -971,40 +999,62 @@ export function Layout({ children, onLogout }: LayoutProps) {
           }
 
           // 3. EQUIPE (TEAM MEMBERS)
-          if (remoteData.teamMembers && Array.isArray(remoteData.teamMembers) && remoteData.teamMembers.length > 0) {
-            setTeamMembers((prevLocal) => {
-              const deletedIds = getDeletedTeamMemberIds();
-              const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
-              const cleanRemote = remoteData.teamMembers!.filter((rm) => !deletedIds.has(rm.id) && !mockIds.has(rm.id));
-              const remoteMap = new Map(cleanRemote.map((rm) => [rm.id, rm]));
-
-              const updatedRemote = cleanRemote.map((rm) => {
-                const local = prevLocal.find((lm) => lm.id === rm.id || (isOwnerOrMarcos(lm) && isOwnerOrMarcos(rm)));
-                const isOwner = isOwnerOrMarcos(rm);
-                return {
-                  ...rm,
-                  username: rm.username || local?.username || (isOwner ? 'lancerotti' : undefined),
-                  password: rm.password || local?.password || (isOwner ? '521Spide#*' : '123456'),
-                  permissions: local?.permissions || rm.permissions,
-                  functionRole: rm.functionRole || local?.functionRole,
-                  avatar: rm.avatar || local?.avatar || '',
-                };
-              });
-
-              // PRESERVAR apenas colaboradores locais válidos (que não sejam os antigos mocks removidos)
-              const localOnly = (prevLocal || []).filter((lm) => !deletedIds.has(lm.id) && !mockIds.has(lm.id) && !remoteMap.has(lm.id));
-              const merged = deduplicateTeamMembers([...updatedRemote, ...localOnly]);
-
-              if (localOnly.length > 0) {
-                needsServerPush = true;
-                pushPayload.teamMembers = merged;
+          let remoteTeamMembersList = (remoteData.teamMembers && Array.isArray(remoteData.teamMembers)) ? remoteData.teamMembers : [];
+          if (remoteTeamMembersList.length === 0) {
+            try {
+              const directTeam = await serverDbService.fetchTeamMembersDirectly();
+              if (Array.isArray(directTeam) && directTeam.length > 0) {
+                remoteTeamMembersList = directTeam;
               }
+            } catch {}
+          }
 
-              try {
-                localStorage.setItem('agency_team_members', JSON.stringify(merged));
-              } catch {}
-              return merged;
+          const deletedTeamMemberIds = getDeletedTeamMemberIds();
+          const mockTeamMemberIds = new Set(['mem-2', 'mem-3', 'mem-4']);
+          const cleanLocalTeam = localTeam.filter((m) => !deletedTeamMemberIds.has(m.id) && !mockTeamMemberIds.has(m.id));
+
+          if (remoteTeamMembersList.length > 0) {
+            const cleanRemote = remoteTeamMembersList.filter((rm: TeamMember) => !deletedTeamMemberIds.has(rm.id) && !mockTeamMemberIds.has(rm.id));
+            const remoteMap = new Map(cleanRemote.map((rm: TeamMember) => [rm.id, rm]));
+
+            const updatedRemote = cleanRemote.map((rm: TeamMember) => {
+              const local = cleanLocalTeam.find((lm) => lm.id === rm.id || (isOwnerOrMarcos(lm) && isOwnerOrMarcos(rm)));
+              const isOwner = isOwnerOrMarcos(rm);
+              const isLocalCustom = isCustomAvatar(local?.avatar);
+              const isRemoteCustom = isCustomAvatar(rm.avatar);
+              const finalAvatar = isRemoteCustom ? rm.avatar : (isLocalCustom ? (local?.avatar || '') : (rm.avatar || local?.avatar || ''));
+              return {
+                ...rm,
+                username: rm.username || local?.username || (isOwner ? 'lancerotti' : undefined),
+                password: rm.password || local?.password || (isOwner ? '521Spide#*' : '123456'),
+                permissions: rm.permissions || local?.permissions,
+                functionRole: rm.functionRole || local?.functionRole,
+                avatar: finalAvatar,
+              };
             });
+
+            // PRESERVAR apenas colaboradores locais válidos (que não sejam os antigos mocks removidos)
+            const localOnly = cleanLocalTeam.filter((lm) => !remoteMap.has(lm.id) && !cleanRemote.some((rm: TeamMember) => isOwnerOrMarcos(rm) && isOwnerOrMarcos(lm)));
+            const merged = deduplicateTeamMembers([...updatedRemote, ...localOnly]);
+
+            setTeamMembers(merged);
+            try {
+              localStorage.setItem('agency_team_members', JSON.stringify(merged));
+            } catch {}
+
+            // Se o navegador local possuía fotos customizadas que o servidor não tinha, atualiza o servidor
+            const hasLocalAvatarsToPush = cleanLocalTeam.some((lm) => isCustomAvatar(lm.avatar) && !cleanRemote.some((rm: TeamMember) => rm.id === lm.id && isCustomAvatar(rm.avatar)));
+            if (localOnly.length > 0 || hasLocalAvatarsToPush) {
+              needsServerPush = true;
+              pushPayload.teamMembers = merged;
+            }
+          } else if (cleanLocalTeam.length > 0) {
+            setTeamMembers(cleanLocalTeam);
+            needsServerPush = true;
+            pushPayload.teamMembers = cleanLocalTeam;
+            try {
+              localStorage.setItem('agency_team_members', JSON.stringify(cleanLocalTeam));
+            } catch {}
           }
 
           // 4. COLUNAS KANBAN
@@ -1135,7 +1185,34 @@ export function Layout({ children, onLogout }: LayoutProps) {
               } catch {}
               return merged;
             });
+          } else if (msg.type === 'team_members:update' && Array.isArray(msg.teamMembers)) {
+            const deletedIds = getDeletedTeamMemberIds();
+            const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
+            const cleanIncoming = msg.teamMembers.filter((m: TeamMember) => !deletedIds.has(m.id) && !mockIds.has(m.id));
+            setTeamMembers((prev) => {
+              const remoteMap = new Map(cleanIncoming.map((m: TeamMember) => [m.id, m]));
+              const localPending = prev.filter((m) => !deletedIds.has(m.id) && !mockIds.has(m.id) && !remoteMap.has(m.id));
+              const merged = deduplicateTeamMembers([...cleanIncoming, ...localPending]);
+              try {
+                localStorage.setItem('agency_team_members', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           } else if (msg.type === 'database:update') {
+            if (msg.teamMembers && Array.isArray(msg.teamMembers)) {
+              const deletedIds = getDeletedTeamMemberIds();
+              const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
+              const cleanIncoming = msg.teamMembers.filter((m: TeamMember) => !deletedIds.has(m.id) && !mockIds.has(m.id));
+              setTeamMembers((prev) => {
+                const remoteMap = new Map(cleanIncoming.map((m: TeamMember) => [m.id, m]));
+                const localPending = prev.filter((m) => !deletedIds.has(m.id) && !mockIds.has(m.id) && !remoteMap.has(m.id));
+                const merged = deduplicateTeamMembers([...cleanIncoming, ...localPending]);
+                try {
+                  localStorage.setItem('agency_team_members', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
             syncWithServerDb(true);
           }
         } catch {}
@@ -2212,6 +2289,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
         localStorage.setItem('agency_team_members', JSON.stringify(finalMembers));
       } catch {}
       serverDbService.saveDatabase({ teamMembers: finalMembers }, true);
+      serverDbService.saveTeamMembersDirectly(finalMembers).catch(() => {});
       return finalMembers;
     });
     if (supabaseService.isConfigured()) {
@@ -2221,6 +2299,39 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const handleUpdateTeamMember = (updatedMember: TeamMember) => {
     lastLocalTeamMemberUpdateRef.current = Date.now();
+
+    // Atualiza imediatamente o perfil do usuário logado se for ele mesmo
+    const isOwner =
+      currentUserProfile?.role === 'proprietario' ||
+      (currentUserProfile as any)?.isMaster ||
+      isOwnerOrMarcos(currentUserProfile);
+    const isCurrentActiveUser =
+      (isOwner && isOwnerOrMarcos(updatedMember)) ||
+      (currentUserProfile.id && (updatedMember.id === currentUserProfile.id || updatedMember.id === `tm-${currentUserProfile.id}`)) ||
+      (currentUserProfile.email && updatedMember.email?.toLowerCase() === currentUserProfile.email.toLowerCase()) ||
+      ((currentUserProfile as any).username && updatedMember.username?.toLowerCase() === (currentUserProfile as any).username.toLowerCase());
+
+    if (isCurrentActiveUser) {
+      setCurrentUserProfile((prev) => ({
+        ...prev,
+        name: updatedMember.name || prev.name,
+        email: updatedMember.email || prev.email,
+        avatarUrl: updatedMember.avatar || prev.avatarUrl,
+      }));
+      try {
+        const savedAuth = localStorage.getItem('help_agency_user');
+        if (savedAuth) {
+          const parsed = JSON.parse(savedAuth);
+          localStorage.setItem('help_agency_user', JSON.stringify({
+            ...parsed,
+            name: updatedMember.name || parsed.name,
+            email: updatedMember.email || parsed.email,
+            avatarUrl: updatedMember.avatar || parsed.avatarUrl,
+          }));
+        }
+      } catch {}
+    }
+
     setTeamMembers((prev) => {
       const updated = prev.map((m) => (m.id === updatedMember.id ? updatedMember : m));
       const finalMembers = deduplicateTeamMembers(updated);
@@ -2228,6 +2339,14 @@ export function Layout({ children, onLogout }: LayoutProps) {
         localStorage.setItem('agency_team_members', JSON.stringify(finalMembers));
       } catch {}
       serverDbService.saveDatabase({ teamMembers: finalMembers }, true);
+      serverDbService.saveTeamMembersDirectly(finalMembers).then((savedServerMembers) => {
+        if (savedServerMembers && Array.isArray(savedServerMembers) && savedServerMembers.length > 0) {
+          setTeamMembers(savedServerMembers);
+          try {
+            localStorage.setItem('agency_team_members', JSON.stringify(savedServerMembers));
+          } catch {}
+        }
+      }).catch(() => {});
       return finalMembers;
     });
 
@@ -2257,6 +2376,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
         if (hasChanges) {
           try {
+            localStorage.setItem('agency_demands', JSON.stringify(updatedDemands));
             localStorage.setItem('agency_demands_v2', JSON.stringify(updatedDemands));
           } catch {}
           serverDbService.saveDatabase({ demands: updatedDemands }, true);

@@ -71,7 +71,7 @@ export interface PortalClienteViewProps {
   onNavigateToPortal?: () => void;
 }
 
-type PortalTab = 'visao_geral' | 'conteudo' | 'metricas' | 'financeiro' | 'arquivos';
+type PortalTab = 'inicio' | 'visao_geral' | 'conteudo' | 'metricas' | 'financeiro' | 'arquivos';
 
 export const isAprovacaoClienteColumn = (columnId?: string, columns?: KanbanColumn[]): boolean => {
   if (!columnId) return false;
@@ -156,8 +156,9 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
   onOpenClientApprovalPortal,
   onNavigateToApprovals,
 }) => {
-  // Aba Ativa (Visão geral, Conteúdo, Métricas, Financeiro, Arquivos)
-  const [activeTab, setActiveTab] = useState<PortalTab>('visao_geral');
+  // Aba Ativa (Início, Visão geral, Conteúdo, Métricas, Financeiro, Arquivos)
+  const [activeTab, setActiveTab] = useState<PortalTab>('inicio');
+  const [approvedDemoIds, setApprovedDemoIds] = useState<Set<string>>(new Set());
   
   // Modal Central Estratégica
   const [isEstrategicaModalOpen, setIsEstrategicaModalOpen] = useState(false);
@@ -310,6 +311,14 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
 
+  // Estados da Central de Prévia & Aprovação Interativa de Peça (Imagem Anexada)
+  const [selectedShowcaseId, setSelectedShowcaseId] = useState<string | null>(null);
+  const [showcaseCommentText, setShowcaseCommentText] = useState('Amei! Ficou excelente.');
+  const [showcaseSlideIndex, setShowcaseSlideIndex] = useState(0);
+  const [showcaseApprovedIds, setShowcaseApprovedIds] = useState<Set<string>>(new Set());
+  const [showcaseAdjustedIds, setShowcaseAdjustedIds] = useState<Record<string, string>>({});
+  const [showcaseCopiedCaption, setShowcaseCopiedCaption] = useState(false);
+
   const toggleCaption = (demandId: string) => {
     setExpandedCaptionIds(prev => ({ ...prev, [demandId]: !prev[demandId] }));
   };
@@ -321,6 +330,17 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     setActionNotice('Legenda copiada para a área de transferência!');
     setTimeout(() => {
       setCopiedCaption(false);
+      setActionNotice(null);
+    }, 3000);
+  };
+
+  const handleCopyShowcaseCaption = (text: string) => {
+    if (!text) return;
+    navigator.clipboard?.writeText?.(text);
+    setShowcaseCopiedCaption(true);
+    setActionNotice('Legenda copiada para a área de transferência!');
+    setTimeout(() => {
+      setShowcaseCopiedCaption(false);
       setActionNotice(null);
     }, 3000);
   };
@@ -412,6 +432,274 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     navigator.clipboard?.writeText?.('financeiro@helpideiasdigitais.com.br');
     setCopiedPix(true);
     setTimeout(() => setCopiedPix(false), 2500);
+  };
+
+  // Nome amigável de saudação da cliente (ex: "Olá, Ana")
+  const greetingName = useMemo(() => {
+    if (currentUser?.name && isClientRole) {
+      const clean = currentUser.name.trim().split(/\s+/)[0];
+      if (clean && clean.length > 1) return clean;
+    }
+    if (activeClient.contactName) {
+      const clean = activeClient.contactName.trim().split(/\s+/)[0];
+      if (clean && clean.length > 1) return clean;
+    }
+    if (activeClient.name) {
+      const clean = activeClient.name.trim().split(/\s+/)[0];
+      if (clean && clean.length > 1) return clean;
+    }
+    return 'Ana';
+  }, [currentUser?.name, isClientRole, activeClient.contactName, activeClient.name]);
+
+  // Dados do Contrato da Cliente (Mensalidade, Renovação, Cobrança e Serviços ativos)
+  const contractDetails = useMemo(() => {
+    const totalMonthlyFee = typeof activeClient.monthlyFee === 'number' && activeClient.monthlyFee > 0
+      ? activeClient.monthlyFee
+      : 4500;
+
+    let renewalDateStr = '05/02/2027';
+    let renewalRelative = 'em 4 meses';
+
+    if (activeClient.joinedDate) {
+      try {
+        const parts = String(activeClient.joinedDate).split(/[-/]/);
+        if (parts.length === 3) {
+          const year = parseInt(parts[0].length === 4 ? parts[0] : parts[2], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[0].length === 4 ? parts[2] : parts[0], 10);
+          const joinDate = new Date(year, month, day);
+          if (!isNaN(joinDate.getTime())) {
+            const renDate = new Date(joinDate);
+            renDate.setFullYear(renDate.getFullYear() + 1);
+            renewalDateStr = renDate.toLocaleDateString('pt-BR');
+            const now = new Date();
+            const diffMonths = Math.max(1, Math.round((renDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+            renewalRelative = `em ${diffMonths} ${diffMonths === 1 ? 'mês' : 'meses'}`;
+          }
+        }
+      } catch {}
+    }
+
+    let billingDayStr = 'Dia 5';
+    if (invoices && invoices.length > 0) {
+      const cInv = invoices.find(inv => inv.client?.toLowerCase().trim() === activeClient.name?.toLowerCase().trim());
+      if (cInv && cInv.dueDate) {
+        const dParts = cInv.dueDate.split(/[-/]/);
+        const day = dParts[0].length <= 2 ? dParts[0] : dParts[2];
+        if (day) billingDayStr = `Dia ${parseInt(day, 10)}`;
+      }
+    }
+
+    const rawServices = activeClient.services && activeClient.services.length > 0
+      ? activeClient.services
+      : ['Gestão de redes sociais', 'Produção de conteúdo'];
+
+    let serviceItems: Array<{ name: string; price: number; status: string }> = [];
+    if (rawServices.length === 2 && totalMonthlyFee === 4500) {
+      serviceItems = [
+        { name: 'Gestão de redes sociais', price: 3000, status: 'Ativo' },
+        { name: 'Produção de conteúdo', price: 1500, status: 'Ativo' },
+      ];
+    } else {
+      serviceItems = rawServices.map((name) => {
+        const matched = services.find(s => s.title.toLowerCase().trim() === name.toLowerCase().trim());
+        const price = matched?.basePrice || Math.round(totalMonthlyFee / Math.max(1, rawServices.length));
+        return { name, price, status: 'Ativo' };
+      });
+    }
+
+    return {
+      monthlyFee: totalMonthlyFee,
+      renewalDate: renewalDateStr,
+      renewalRelative,
+      billingDay: billingDayStr,
+      services: serviceItems,
+    };
+  }, [activeClient.monthlyFee, activeClient.joinedDate, activeClient.services, activeClient.name, invoices, services]);
+
+  // Itens para aprovação no card "Para aprovar"
+  const approvalItems = useMemo(() => {
+    if (pendingApprovalDemands.length > 0) {
+      return pendingApprovalDemands.map((d) => {
+        let cleanDate = '14/10';
+        if (d.dueDate) {
+          if (d.dueDate.includes('/')) {
+            const parts = d.dueDate.split('/');
+            cleanDate = `${parts[0]}/${parts[1]}`;
+          } else if (d.dueDate.includes('-')) {
+            const parts = d.dueDate.split('-');
+            cleanDate = `${parts[2]}/${parts[1]}`;
+          }
+        }
+        return {
+          id: d.id,
+          title: d.title,
+          type: d.type ? (d.type.toLowerCase().includes('feed') || d.type.toLowerCase().includes('post') ? 'Feed' : d.type.toLowerCase().includes('stor') ? 'Stories' : 'Feed') : 'Feed',
+          date: cleanDate,
+          thumbnail: d.thumbnail || (d.attachments && d.attachments[0]?.url) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+          isReal: true,
+          demand: d,
+        };
+      });
+    }
+
+    // Peças demonstrativas fiéis à imagem anexada de referência
+    const demoPosts = [
+      {
+        id: 'demo-post-flamengo',
+        title: 'Flamengo divulga os 5 finalistas no uniforme feito pelo público',
+        type: 'Feed',
+        date: '12/10 às 18:00',
+        thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+        isReal: false,
+        demand: {
+          id: 'DEM-FLAMENGO-01',
+          title: 'Flamengo divulga os 5 finalistas no uniforme feito pelo público',
+          client: activeClient.name || 'Portal Publicitário',
+          description: 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.',
+          type: 'Feed',
+          status: 'aprovacao',
+          approvalStatus: 'pendente',
+          dueDate: '12/10 às 18:00',
+          clientProject: 'Concurso Manto da Massa',
+        } as DemandItem,
+      },
+      {
+        id: 'demo-post-1',
+        title: 'Valorize o Social Media',
+        type: 'Feed',
+        date: '14/10',
+        thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+        isReal: false,
+        demand: {
+          id: 'DEM-SOCIAL-02',
+          title: 'Valorize o Social Media',
+          client: activeClient.name || 'Portal Publicitário',
+          description: 'Por trás de cada post viral existe um profissional que estuda métricas, tendências, algoritmos e comportamento do consumidor todos os dias. Valorize seu Social Media!',
+          type: 'Feed',
+          status: 'aprovacao',
+          approvalStatus: 'pendente',
+          dueDate: '14/10',
+          clientProject: 'Campanha Institucional',
+        } as DemandItem,
+      },
+      {
+        id: 'demo-post-2',
+        title: 'Marketing não salva produto ruim',
+        type: 'Feed',
+        date: '16/10',
+        thumbnail: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=200&auto=format&fit=crop&q=80',
+        isReal: false,
+        demand: {
+          id: 'DEM-MKT-03',
+          title: 'Marketing não salva produto ruim',
+          client: activeClient.name || 'Portal Publicitário',
+          description: 'A propaganda atrai novos clientes para a porta da sua empresa, mas é a qualidade impecável da entrega que faz eles voltarem e recomendarem.',
+          type: 'Feed',
+          status: 'aprovacao',
+          approvalStatus: 'pendente',
+          dueDate: '16/10',
+          clientProject: 'Branding & Posicionamento',
+        } as DemandItem,
+      },
+    ];
+
+    return demoPosts.filter(p => !approvedDemoIds.has(p.id));
+  }, [pendingApprovalDemands, approvedDemoIds, activeClient.name]);
+
+  // Item e Demanda atualmente selecionados na Central de Prévia & Aprovação
+  const currentShowcaseItem = useMemo(() => {
+    if (selectedShowcaseId) {
+      const found = approvalItems.find((item) => item.id === selectedShowcaseId);
+      if (found) return found;
+    }
+    return approvalItems[0] || null;
+  }, [approvalItems, selectedShowcaseId]);
+
+  const showcaseDemand: DemandItem | null = useMemo(() => {
+    if (!currentShowcaseItem) return null;
+    if (currentShowcaseItem.demand) return currentShowcaseItem.demand;
+    return {
+      id: currentShowcaseItem.id,
+      title: currentShowcaseItem.title,
+      client: activeClient.name || 'Portal Publicitário',
+      description: 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.',
+      type: currentShowcaseItem.type,
+      dueDate: currentShowcaseItem.date,
+      status: 'aprovacao',
+      approvalStatus: 'pendente',
+    } as DemandItem;
+  }, [currentShowcaseItem, activeClient.name]);
+
+  const isShowcaseApproved = Boolean(
+    currentShowcaseItem && (
+      showcaseApprovedIds.has(currentShowcaseItem.id) ||
+      showcaseDemand?.approvalStatus === 'aprovado'
+    )
+  );
+
+  const isShowcaseAdjusted = Boolean(
+    currentShowcaseItem && (
+      showcaseAdjustedIds[currentShowcaseItem.id] ||
+      showcaseDemand?.approvalStatus === 'alteracao_solicitada'
+    )
+  );
+
+  const isShowcaseFlamengo = useMemo(() => {
+    const title = (showcaseDemand?.title || currentShowcaseItem?.title || '').toLowerCase();
+    return title.includes('flamengo');
+  }, [showcaseDemand?.title, currentShowcaseItem?.title]);
+
+  const showcaseMedia = useMemo(() => {
+    if (showcaseDemand?.attachments && showcaseDemand.attachments.length > 0) {
+      return showcaseDemand.attachments;
+    }
+    if (showcaseDemand?.thumbnail) {
+      return [{ id: 'thumb', name: 'Mídia', url: showcaseDemand.thumbnail, size: 0, type: 'image' }];
+    }
+    if (currentShowcaseItem?.thumbnail && !isShowcaseFlamengo) {
+      return [{ id: 'thumb', name: 'Mídia', url: currentShowcaseItem.thumbnail, size: 0, type: 'image' }];
+    }
+    return [];
+  }, [showcaseDemand?.attachments, showcaseDemand?.thumbnail, currentShowcaseItem?.thumbnail, isShowcaseFlamengo]);
+
+  const totalShowcaseSlides = Math.max(1, showcaseMedia.length);
+  const currentShowcaseMedia = showcaseMedia[showcaseSlideIndex] || showcaseMedia[0];
+
+  const handleShowcaseApprove = () => {
+    if (!currentShowcaseItem) return;
+    setShowcaseApprovedIds((prev) => new Set(prev).add(currentShowcaseItem.id));
+    if (currentShowcaseItem.isReal && currentShowcaseItem.demand) {
+      onClientApprovalAction(currentShowcaseItem.demand.id, 'aprovado');
+    } else {
+      setApprovedDemoIds((prev) => new Set(prev).add(currentShowcaseItem.id));
+    }
+    setActionNotice(`Material "${currentShowcaseItem.title}" aprovado para agendamento com sucesso!`);
+    setTimeout(() => setActionNotice(null), 4500);
+  };
+
+  const handleShowcaseAdjust = () => {
+    if (!currentShowcaseItem) return;
+    const feedback = showcaseCommentText.trim() || 'Ajustes solicitados pelo cliente';
+    setShowcaseAdjustedIds((prev) => ({ ...prev, [currentShowcaseItem.id]: feedback }));
+    if (currentShowcaseItem.isReal && currentShowcaseItem.demand) {
+      onClientApprovalAction(currentShowcaseItem.demand.id, 'alteracao_solicitada', feedback);
+    }
+    setActionNotice(`Solicitação de ajuste enviada para a agência: "${feedback}"`);
+    setTimeout(() => setActionNotice(null), 4500);
+  };
+
+  const handleQuickApprove = (item: any) => {
+    if (item.isReal && item.demand) {
+      onClientApprovalAction(item.demand.id, 'aprovado');
+      setShowcaseApprovedIds((prev) => new Set(prev).add(item.id));
+      setActionNotice(`Material "${item.title}" aprovado com sucesso!`);
+    } else {
+      setApprovedDemoIds(prev => new Set(prev).add(item.id));
+      setShowcaseApprovedIds((prev) => new Set(prev).add(item.id));
+      setActionNotice(`Material "${item.title}" aprovado com sucesso!`);
+    }
+    setTimeout(() => setActionNotice(null), 3500);
   };
 
   return (
@@ -524,9 +812,27 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
       </div>
 
       {/* ==================================================================== */}
-      {/* 2. BARRA DE NAVEGAÇÃO EM PÍLULAS (Visão geral, Conteúdo, Métricas...) */}
+      {/* 2. BARRA DE NAVEGAÇÃO EM PÍLULAS (Início, Visão geral, Conteúdo...)  */}
       {/* ==================================================================== */}
       <div className="bg-white dark:bg-[#0c1424] rounded-full p-1.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center gap-1 overflow-x-auto scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setActiveTab('inicio')}
+          className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+            activeTab === 'inicio'
+              ? 'bg-[#ff9900] text-[#142142] shadow-xs'
+              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+          }`}
+        >
+          <Sparkles size={15} className={activeTab === 'inicio' ? 'text-[#142142]' : 'text-slate-500'} />
+          <span>Início</span>
+          {approvalItems.length > 0 && (
+            <span className="w-5 h-5 rounded-full bg-[#12151e] text-[#ff9900] text-[10px] font-black flex items-center justify-center">
+              {approvalItems.length}
+            </span>
+          )}
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('visao_geral')}
@@ -597,6 +903,482 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           <span>Arquivos</span>
         </button>
       </div>
+
+      {/* ==================================================================== */}
+      {/* NOVO: CONTEÚDO DA ABA "Início" (DESIGN BASEADO NA IMAGEM ANEXADA)   */}
+      {/* ==================================================================== */}
+      {activeTab === 'inicio' && (
+        <div className="space-y-6">
+          {/* Saudação Personalizada */}
+          <div className="space-y-1">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Olá, {greetingName}
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+              Veja o que a agência preparou para você.
+            </p>
+          </div>
+
+          {/* Grid Principal com 2 Cards Grandes lado a lado */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6 items-start">
+            
+            {/* ---------------------------------------------------------------- */}
+            {/* CARD 1: "Para aprovar" com contador                               */}
+            {/* ---------------------------------------------------------------- */}
+            <div className="bg-white dark:bg-[#0c1424] rounded-[28px] sm:rounded-[32px] p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-5">
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+                  Para aprovar
+                </h3>
+                {approvalItems.length > 0 && (
+                  <span className="w-6 h-6 rounded-full bg-[#ff9900] text-white text-xs font-black flex items-center justify-center shrink-0 shadow-xs">
+                    {approvalItems.length}
+                  </span>
+                )}
+              </div>
+
+              {approvalItems.length === 0 ? (
+                <div className="py-8 text-center space-y-2 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <p className="text-sm font-bold text-slate-800 dark:text-white">
+                    Tudo aprovado por aqui!
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Não há materiais pendentes de revisão no momento.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {approvalItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`rounded-2xl p-3.5 sm:p-4 border transition-all group flex items-center justify-between gap-3.5 ${
+                        currentShowcaseItem?.id === item.id
+                          ? 'bg-amber-500/10 dark:bg-amber-950/30 border-[#ff9900] ring-1 ring-[#ff9900]/40'
+                          : 'bg-slate-50/90 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800/80 hover:bg-slate-100/80 dark:hover:bg-slate-800/70'
+                      }`}
+                    >
+                      {/* Lado Esquerdo: Miniatura da Peça + Título + Formato/Data */}
+                      <div 
+                        onClick={() => {
+                          setSelectedShowcaseId(item.id);
+                        }}
+                        className="flex items-center gap-3.5 min-w-0 flex-1 cursor-pointer"
+                        title="Clique para selecionar e revisar na Central de Aprovação"
+                      >
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0 bg-slate-200 dark:bg-slate-700 relative border border-slate-200/80 dark:border-slate-700">
+                          <img
+                            src={item.thumbnail}
+                            alt={item.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80';
+                            }}
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate group-hover:text-[#ff9900] transition-colors">
+                            {item.title}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                            <Instagram size={13} className="text-slate-400 shrink-0" />
+                            <span>{item.type} · {item.date}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botão de Abrir Modal Ampliado */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (item.demand) setPreviewPost(item.demand);
+                        }}
+                        className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors shrink-0"
+                        title="Abrir em tela cheia"
+                      >
+                        <Maximize2 size={14} />
+                      </button>
+
+                      {/* Lado Direito: Botão Laranja "Aprovar" */}
+                      <button
+                        type="button"
+                        onClick={() => handleQuickApprove(item)}
+                        className="bg-[#ff9900] hover:bg-[#e68a00] active:scale-95 text-white font-bold text-xs sm:text-sm px-5 sm:px-6 py-2.5 rounded-full shadow-xs hover:shadow-md transition-all cursor-pointer shrink-0"
+                      >
+                        Aprovar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Link para Fila Completa de Conteúdo */}
+              <div className="pt-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('conteudo')}
+                  className="text-xs font-bold text-[#ff9900] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Ver todos os materiais em Conteúdo</span>
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* ---------------------------------------------------------------- */}
+            {/* CARD 2: "Seu contrato"                                            */}
+            {/* ---------------------------------------------------------------- */}
+            <div className="bg-white dark:bg-[#0c1424] rounded-[28px] sm:rounded-[32px] p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-5">
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+                Seu contrato
+              </h3>
+
+              {/* 3 Caixas de Métricas do Contrato Lado a Lado */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                {/* 1. MENSALIDADE */}
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-3 sm:p-4 border border-slate-100 dark:border-slate-800/80 flex flex-col justify-between">
+                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
+                    MENSALIDADE
+                  </p>
+                  <p className="text-xs sm:text-base md:text-lg font-black text-slate-900 dark:text-white font-mono pt-1">
+                    R$ {contractDetails.monthlyFee.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium pt-0.5">
+                    por mês
+                  </p>
+                </div>
+
+                {/* 2. RENOVAÇÃO */}
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-3 sm:p-4 border border-slate-100 dark:border-slate-800/80 flex flex-col justify-between">
+                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
+                    RENOVAÇÃO
+                  </p>
+                  <p className="text-xs sm:text-base md:text-lg font-black text-slate-900 dark:text-white font-mono pt-1">
+                    {contractDetails.renewalDate}
+                  </p>
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium pt-0.5">
+                    {contractDetails.renewalRelative}
+                  </p>
+                </div>
+
+                {/* 3. COBRANÇA */}
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-3 sm:p-4 border border-slate-100 dark:border-slate-800/80 flex flex-col justify-between">
+                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
+                    COBRANÇA
+                  </p>
+                  <p className="text-xs sm:text-base md:text-lg font-black text-slate-900 dark:text-white font-mono pt-1">
+                    {contractDetails.billingDay}
+                  </p>
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium pt-0.5">
+                    todo mês
+                  </p>
+                </div>
+              </div>
+
+              {/* Lista de Serviços Contratados */}
+              <div className="space-y-2.5 sm:space-y-3 pt-1">
+                {contractDetails.services.map((serv, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-all"
+                  >
+                    <div>
+                      <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                        {serv.name}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium font-mono pt-0.5">
+                        R$ {serv.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} por mês
+                      </p>
+                    </div>
+
+                    <span className="px-3.5 py-1 rounded-full bg-emerald-600 text-white font-bold text-xs tracking-wide shadow-xs shrink-0 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                      <span>{serv.status}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* ==================================================================== */}
+          {/* NOVA FUNCIONALIDADE: CENTRAL DE PRÉVIA & APROVAÇÃO INTERATIVA        */}
+          {/* (DESIGN E ESTRUTURA FIÉIS À IMAGEM DE REFERÊNCIA)                    */}
+          {/* ==================================================================== */}
+          {currentShowcaseItem && (
+            <div className="bg-white dark:bg-[#0c1424] rounded-[28px] sm:rounded-[36px] p-6 sm:p-8 lg:p-10 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-6">
+              
+              {/* Header da Seção de Aprovação */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-[#ff9900]/15 text-[#ff9900] flex items-center justify-center font-bold text-xs shadow-2xs">
+                      <Sparkles size={16} />
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                      Central de Prévia & Aprovação
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Visualize o material exatamente como será publicado no feed e aprove ou solicite ajustes com 1 clique.
+                  </p>
+                </div>
+
+                {/* Seletor rápido de peças se houver mais de 1 para aprovar */}
+                {approvalItems.length > 1 && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+                    <span className="text-[11px] font-semibold text-slate-400 shrink-0 mr-1">
+                      Selecionar peça:
+                    </span>
+                    {approvalItems.map((item, idx) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSelectedShowcaseId(item.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                          currentShowcaseItem.id === item.id
+                            ? 'bg-[#142142] dark:bg-white text-white dark:text-[#142142] shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        Peça #{idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Grid de 2 Colunas: Mockup do Post (Esquerda) e Detalhes/Aprovação (Direita) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+                
+                {/* -------------------------------------------------------------- */}
+                {/* COLUNA ESQUERDA: DISPOSITIVO MOCKUP DO POST (5 cols)           */}
+                {/* -------------------------------------------------------------- */}
+                <div className="lg:col-span-5 flex flex-col items-center">
+                  <div className="w-full max-w-[340px] sm:max-w-[360px] aspect-[4/5] rounded-[28px] sm:rounded-[34px] overflow-hidden shadow-xl border border-slate-200/90 dark:border-slate-800/80 bg-gradient-to-b from-[#fbf8f3] via-[#ffedd5] to-[#f97316] relative flex flex-col justify-between group select-none">
+                    
+                    {/* Badge Contador de Lâmina: 1/1 (Top-Right) */}
+                    <div className="absolute top-4 right-4 z-20 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-xs font-black tracking-wider shadow-xs">
+                      {showcaseSlideIndex + 1}/{totalShowcaseSlides}
+                    </div>
+
+                    {/* Botão de Expandir / Ver em Tela Cheia (Bottom-Left) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (showcaseDemand) setPreviewPost(showcaseDemand);
+                      }}
+                      className="absolute bottom-4 left-4 z-20 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md transition-all cursor-pointer opacity-80 group-hover:opacity-100 shadow-xs"
+                      title="Abrir em tamanho ampliado"
+                    >
+                      <Maximize2 size={15} />
+                    </button>
+
+                    {/* Controles de Navegação se houver múltiplos slides */}
+                    {totalShowcaseSlides > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowcaseSlideIndex((prev) => (prev > 0 ? prev - 1 : totalShowcaseSlides - 1))}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all cursor-pointer opacity-80 group-hover:opacity-100"
+                          title="Slide anterior"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowcaseSlideIndex((prev) => (prev < totalShowcaseSlides - 1 ? prev + 1 : 0))}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all cursor-pointer opacity-80 group-hover:opacity-100"
+                          title="Próximo slide"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </>
+                    )}
+
+                    {/* Conteúdo da Peça: Mockup Flamengo ou Imagem */}
+                    <div 
+                      className="w-full h-full relative cursor-pointer overflow-hidden flex items-center justify-center bg-slate-950"
+                      onClick={() => {
+                        if (totalShowcaseSlides > 1) {
+                          setShowcaseSlideIndex((prev) => (prev < totalShowcaseSlides - 1 ? prev + 1 : 0));
+                        } else if (showcaseDemand) {
+                          setPreviewPost(showcaseDemand);
+                        }
+                      }}
+                    >
+                      {isShowcaseFlamengo && !currentShowcaseMedia?.url ? (
+                        <FlamengoMockupCard />
+                      ) : currentShowcaseMedia?.url ? (
+                        <img
+                          src={currentShowcaseMedia.url}
+                          alt={currentShowcaseItem.title}
+                          className="w-full h-full object-contain rounded-[28px] sm:rounded-[34px]"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#fbf8f3] via-[#ffedd5] to-[#f97316] text-[#142142]">
+                          <p className="text-xl font-black uppercase tracking-tight text-[#142142]">
+                            {currentShowcaseItem.title}
+                          </p>
+                          <p className="text-xs text-slate-800 font-medium pt-2">
+                            {showcaseDemand?.description || 'Peça publicitária pronta para aprovação'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Indicador de Bolinhas do Carrossel */}
+                  {totalShowcaseSlides > 1 && (
+                    <div className="flex items-center gap-1.5 pt-3">
+                      {showcaseMedia.map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setShowcaseSlideIndex(idx)}
+                          className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                            showcaseSlideIndex === idx 
+                              ? 'w-6 bg-[#f97316]' 
+                              : 'w-1.5 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* -------------------------------------------------------------- */}
+                {/* COLUNA DIREITA: INFORMAÇÕES DO POST & APROVAÇÃO (7 cols)       */}
+                {/* -------------------------------------------------------------- */}
+                <div className="lg:col-span-7 flex flex-col justify-center space-y-4 sm:space-y-5">
+                  
+                  {/* 1. Meta Row: [PP] Nome do Cliente · Feed · 12/10 às 18:00 */}
+                  <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
+                    <div className="w-7 h-7 rounded-full bg-[#f97316] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                      {clientInitials}
+                    </div>
+                    <span className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                      {activeClient.companyName || activeClient.name || 'Portal Publicitário'}
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <div className="flex items-center gap-1 font-medium text-slate-600 dark:text-slate-300">
+                      <Instagram size={14} className="text-slate-500" />
+                      <span>{currentShowcaseItem.type || 'Feed'}</span>
+                    </div>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">
+                      {currentShowcaseItem.date}
+                    </span>
+                  </div>
+
+                  {/* 2. Título do Post (Flamengo: camisa feita pelo público) */}
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-snug">
+                    {currentShowcaseItem.title}
+                  </h2>
+
+                  {/* 3. Status Capsule: Aguardando sua aprovação / Aprovado */}
+                  <div>
+                    {isShowcaseApproved ? (
+                      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-600 text-white text-xs sm:text-sm font-medium shadow-xs">
+                        <CheckCircle2 size={14} className="stroke-[2.5]" />
+                        <span>Aprovado para agendamento</span>
+                      </div>
+                    ) : isShowcaseAdjusted ? (
+                      <div className="space-y-2">
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500 text-white text-xs sm:text-sm font-medium shadow-xs">
+                          <Clock size={14} className="stroke-[2.5]" />
+                          <span>Ajustes solicitados à agência</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200">
+                          <span className="font-bold block text-[10px] text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-0.5">
+                            Ajuste solicitado por você:
+                          </span>
+                          <p className="italic font-bold text-slate-800 dark:text-slate-100">
+                            “{showcaseAdjustedIds[currentShowcaseItem.id] || showcaseDemand?.approvalFeedback}”
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#8E99A8] text-white text-xs sm:text-sm font-medium shadow-xs">
+                        <Clock size={14} className="stroke-[2.5]" />
+                        <span>Aguardando sua aprovação</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Texto da Legenda (Copy) com botão de Copiar */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      <span>Texto da Legenda (Copy)</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyShowcaseCaption(showcaseDemand?.description || currentShowcaseItem.title)}
+                        className="text-[11px] font-semibold text-[#f97316] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        {showcaseCopiedCaption ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                        <span>{showcaseCopiedCaption ? 'Copiada!' : 'Copiar Texto'}</span>
+                      </button>
+                    </div>
+                    <div className="p-3.5 rounded-[20px] bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed max-h-36 overflow-y-auto whitespace-pre-wrap">
+                      {showcaseDemand?.description || 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.'}
+                    </div>
+                  </div>
+
+                  {/* 5. Caixa de Comentário para a Agência */}
+                  <div className="bg-white dark:bg-[#121827] rounded-[22px] p-3.5 sm:p-4 border border-slate-200/90 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-[#f97316]/30 transition-all">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                      <MessageSquare size={14} className="text-slate-500" />
+                      <span>Comentário para a agência</span>
+                    </div>
+                    <textarea
+                      value={showcaseCommentText}
+                      onChange={(e) => setShowcaseCommentText(e.target.value)}
+                      placeholder="Amei! Ficou excelente... Ou descreva os ajustes desejados"
+                      rows={2}
+                      className="w-full bg-transparent text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none font-normal leading-relaxed"
+                    />
+                  </div>
+
+                  {/* 6. Botões de Ação: [Pedir ajustes]  [✓ Aprovar] */}
+                  <div className="flex items-center justify-end gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleShowcaseAdjust}
+                      className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold text-xs sm:text-sm shadow-xs border border-slate-200/80 dark:border-slate-700 transition-all cursor-pointer"
+                    >
+                      Pedir ajustes
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleShowcaseApprove}
+                      disabled={isShowcaseApproved}
+                      className={`px-6 sm:px-8 py-2.5 sm:py-3 rounded-full font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center gap-2 active:scale-95 ${
+                        isShowcaseApproved
+                          ? 'bg-emerald-600 text-white cursor-default'
+                          : 'bg-[#f97316] hover:bg-[#ea580c] text-white hover:shadow-lg'
+                      }`}
+                    >
+                      <Check size={18} className="stroke-[3]" />
+                      <span>{isShowcaseApproved ? 'Aprovado' : 'Aprovar'}</span>
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ==================================================================== */}
       {/* 3. CONTEÚDO DA ABA: "Visão geral" (DESIGN IDÊNTICO À IMAGEM aaaa.png) */}

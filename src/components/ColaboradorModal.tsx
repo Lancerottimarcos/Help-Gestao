@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { TeamMember, TeamFunctionOption, MemberPermissions } from '../types';
 import { isOwnerOrMarcos, updateMasterPassword } from '../utils/securityProtocols';
+import { serverDbService } from '../services/serverDbService';
 import {
   DEFAULT_NEW_COLLABORATOR_PERMISSIONS,
   FULL_ACCESS_PERMISSIONS,
@@ -215,9 +216,28 @@ export const ColaboradorModal: React.FC<ColaboradorModalProps> = ({
           const compressed = canvas.toDataURL('image/jpeg', 0.88);
           setAvatar(compressed);
           setCustomAvatarUrl(compressed);
+
+          // Salva imediatamente no servidor para obter URL estática permanente acessível por todos os computadores e celulares
+          serverDbService.uploadAvatar(compressed, memberToEdit?.id, file.name)
+            .then((serverUrl) => {
+              if (serverUrl) {
+                setAvatar(serverUrl);
+                setCustomAvatarUrl(serverUrl);
+              }
+            })
+            .catch(() => {});
         } else {
           setAvatar(result);
           setCustomAvatarUrl(result);
+
+          serverDbService.uploadAvatar(result, memberToEdit?.id, file.name)
+            .then((serverUrl) => {
+              if (serverUrl) {
+                setAvatar(serverUrl);
+                setCustomAvatarUrl(serverUrl);
+              }
+            })
+            .catch(() => {});
         }
       };
       img.src = result;

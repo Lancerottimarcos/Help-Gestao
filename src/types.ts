@@ -288,6 +288,7 @@ export interface TeamMember {
   createdAt?: string;
   createdBy?: string;
   permissions?: MemberPermissions;
+  updatedAt?: string | number;
 }
 
 export type ActivityType = 

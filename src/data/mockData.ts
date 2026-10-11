@@ -44,7 +44,7 @@ export const kanbanColumnsData: KanbanColumn[] = [
 
 export const initialTeamMembers: TeamMember[] = [
   {
-    id: 'mem-1',
+    id: 'tm-1',
     name: 'Marcos Lancerotti',
     role: 'CEO & Diretor Criativo',
     functionRole: 'CEO',

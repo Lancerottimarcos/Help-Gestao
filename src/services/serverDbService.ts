@@ -440,6 +440,9 @@ export const serverDbService = {
     if (Array.isArray(payload.demands) && payload.demands.length > 0) {
       this.saveDemandsDirectly(payload.demands).catch(() => {});
     }
+    if (Array.isArray(payload.teamMembers) && payload.teamMembers.length > 0) {
+      this.saveTeamMembersDirectly(payload.teamMembers).catch(() => {});
+    }
 
     return new Promise((resolve) => {
       pendingPayload = { ...pendingPayload, ...payload };
@@ -459,6 +462,64 @@ export const serverDbService = {
         }, 300);
       }
     });
+  },
+
+  /**
+   * Endpoint de canal direto para buscar membros da equipe
+   */
+  async fetchTeamMembersDirectly(): Promise<TeamMember[]> {
+    try {
+      const res = await fetch('/api/team-members');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          return json.data;
+        }
+      }
+    } catch {}
+    return [];
+  },
+
+  /**
+   * Endpoint de canal direto para persistir membros da equipe
+   */
+  async saveTeamMembersDirectly(teamMembers: TeamMember[]): Promise<TeamMember[] | null> {
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamMembers }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          return json.data;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Endpoint para upload dedicado e persistência física de fotos de perfil (avatares)
+   */
+  async uploadAvatar(image: string, memberId?: string, fileName?: string): Promise<string | null> {
+    try {
+      const res = await fetch('/api/upload-avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, memberId, fileName }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.url) {
+          return json.url;
+        }
+      }
+    } catch {}
+    return null;
   },
 
   /**

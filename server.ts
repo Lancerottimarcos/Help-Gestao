@@ -154,6 +154,95 @@ if (!fs.existsSync(DATA_DIR)) {
   }
 }
 
+// Diretórios para uploads de fotos de perfil e mídias estáticas
+const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
+const FALLBACK_UPLOADS_DIR = path.join(process.cwd(), "uploads");
+const DIST_UPLOADS_DIR = path.join(process.cwd(), "dist", "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch {}
+}
+if (!fs.existsSync(FALLBACK_UPLOADS_DIR)) {
+  try { fs.mkdirSync(FALLBACK_UPLOADS_DIR, { recursive: true }); } catch {}
+}
+if (!fs.existsSync(DIST_UPLOADS_DIR)) {
+  try { fs.mkdirSync(DIST_UPLOADS_DIR, { recursive: true }); } catch {}
+}
+
+function saveBase64Image(dataUriOrBase64: string, prefix = "avatar"): string | null {
+  if (!dataUriOrBase64 || typeof dataUriOrBase64 !== "string") return null;
+  const match = dataUriOrBase64.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+  if (!match) return null;
+
+  let ext = match[1].toLowerCase();
+  if (ext === "jpeg") ext = "jpg";
+  if (ext === "svg+xml") ext = "svg";
+  const base64Data = match[2];
+  try {
+    const buffer = Buffer.from(base64Data, "base64");
+    const filename = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+    const filePath = path.join(UPLOADS_DIR, filename);
+    const fallbackPath = path.join(FALLBACK_UPLOADS_DIR, filename);
+    const distPath = path.join(DIST_UPLOADS_DIR, filename);
+
+    fs.writeFileSync(filePath, buffer);
+    try { fs.writeFileSync(fallbackPath, buffer); } catch {}
+    try { fs.writeFileSync(distPath, buffer); } catch {}
+    return `/uploads/${filename}`;
+  } catch (err) {
+    console.error("Erro ao salvar imagem localmente:", err);
+    return null;
+  }
+}
+
+function isCustomAvatar(avatar?: string): boolean {
+  if (!avatar || typeof avatar !== "string") return false;
+  const trimmed = avatar.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("data:image/") || trimmed.startsWith("/uploads/")) return true;
+  if (trimmed.includes("photo-1534528741775")) return false; // Stock placeholder
+  return true;
+}
+
+function isOwnerOrMarcos(member?: any): boolean {
+  if (!member) return false;
+  const name = String(member.name || "").toLowerCase();
+  const email = String(member.email || "").toLowerCase();
+  const username = String(member.username || "").toLowerCase().replace(/^@/, "");
+  return (
+    member.id === "tm-1" ||
+    (name.includes("marcos") && name.includes("lancerotti")) ||
+    email === "lancerottirmarcos@gmail.com" ||
+    username === "lancerotti"
+  );
+}
+
+const DEFAULT_OWNER_MEMBER = {
+  id: "tm-1",
+  name: "Marcos Lancerotti",
+  role: "CEO & Diretor Criativo",
+  functionRole: "CEO",
+  email: "lancerottirmarcos@gmail.com",
+  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256",
+  activeTasks: 0,
+  status: "Disponível",
+  specialties: ["Direção Executiva", "Liderança", "Visão Estratégica"],
+  username: "lancerotti",
+  password: "521Spide#*",
+  permissions: {
+    clientes: true,
+    servicos: true,
+    financeiro: true,
+    orcamentos: true,
+    equipe: true,
+    configuracoes: true,
+    inicio: true,
+    demandas: true,
+    calendario: true,
+    agenda: true,
+    aprovacoes: true,
+  },
+};
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -161,6 +250,29 @@ async function startServer() {
   let broadcast = (_data: any, _excludeWs?: WebSocket) => {};
 
   app.use(express.json({ limit: "25mb" }));
+
+  // Serve arquivos estáticos de upload em todos os diretórios com headers CORS e Cache
+  app.use("/uploads", (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    next();
+  }, express.static(UPLOADS_DIR));
+  app.use("/uploads", express.static(FALLBACK_UPLOADS_DIR));
+  app.use("/uploads", express.static(DIST_UPLOADS_DIR));
+
+  // Rota direta de entrega de imagens em /uploads/:filename
+  app.get("/uploads/:filename", (req, res, next) => {
+    const filename = path.basename(req.params.filename);
+    for (const dir of [UPLOADS_DIR, FALLBACK_UPLOADS_DIR, DIST_UPLOADS_DIR]) {
+      const p = path.join(dir, filename);
+      if (fs.existsSync(p)) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.sendFile(p);
+      }
+    }
+    next();
+  });
 
   // ==================================================================
   // MIDDLEWARE DE CABEÇALHOS DE SEGURANÇA (OWASP Compliant)
@@ -309,7 +421,34 @@ async function startServer() {
       const localList = Array.isArray(local[col]) ? local[col] : [];
       const remoteList = Array.isArray(remote[col]) ? remote[col] : [];
 
-      if (remoteList.length > 0 && localList.length === 0) {
+      if (col === "teamMembers") {
+        if (remoteList.length > 0 && localList.length === 0) {
+          merged[col] = remoteList;
+        } else if (localList.length > 0 && remoteList.length === 0) {
+          merged[col] = localList;
+        } else if (localList.length > 0 && remoteList.length > 0) {
+          const remoteMap = new Map(remoteList.map((item: any) => [item.id, item]));
+          // Mescla cada membro preservando fotos customizadas
+          const mergedMembers = remoteList.map((rm: any) => {
+            const lm = localList.find((l: any) => l.id === rm.id || (isOwnerOrMarcos(l) && isOwnerOrMarcos(rm)));
+            if (!lm) return rm;
+            const isLocalCustom = isCustomAvatar(lm.avatar);
+            const isRemoteCustom = isCustomAvatar(rm.avatar);
+            const finalAvatar = isRemoteCustom ? rm.avatar : (isLocalCustom ? lm.avatar : (rm.avatar || lm.avatar || ""));
+            return {
+              ...lm,
+              ...rm,
+              avatar: finalAvatar,
+              permissions: rm.permissions || lm.permissions,
+              specialties: Array.isArray(rm.specialties) && rm.specialties.length > 0 ? rm.specialties : lm.specialties,
+            };
+          });
+          const localOnly = localList.filter((item: any) => !remoteMap.has(item.id) && !remoteList.some((rm: any) => isOwnerOrMarcos(rm) && isOwnerOrMarcos(item)));
+          merged[col] = [...mergedMembers, ...localOnly];
+        } else {
+          merged[col] = [DEFAULT_OWNER_MEMBER];
+        }
+      } else if (remoteList.length > 0 && localList.length === 0) {
         merged[col] = remoteList;
       } else if (localList.length > 0 && remoteList.length === 0) {
         merged[col] = localList;
@@ -350,11 +489,12 @@ async function startServer() {
       }
     }
 
-    // Se a base local não tiver clientes E não tiver demandas, tenta hidratar do Firestore
+    // Se a base local não tiver clientes, demandas OU equipe, tenta hidratar do Firestore
     const hasLocalClients = Array.isArray(inMemoryDatabaseState?.clients) && inMemoryDatabaseState.clients.length > 0;
     const hasLocalDemands = Array.isArray(inMemoryDatabaseState?.demands) && inMemoryDatabaseState.demands.length > 0;
+    const hasLocalTeam = Array.isArray(inMemoryDatabaseState?.teamMembers) && inMemoryDatabaseState.teamMembers.length > 0;
 
-    if (!hasLocalClients || !hasLocalDemands) {
+    if (!hasLocalClients || !hasLocalDemands || !hasLocalTeam) {
       try {
         console.log("[Database Server] Verificando sincronização com Firestore REST (agency_data/main_state)...");
         const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
@@ -365,7 +505,9 @@ async function startServer() {
             "Demandas:",
             remote.demands?.length,
             "Serviços:",
-            remote.services?.length
+            remote.services?.length,
+            "Equipe:",
+            remote.teamMembers?.length
           );
           inMemoryDatabaseState = mergeDatabaseStates(inMemoryDatabaseState || {}, remote);
           persistDatabaseState(inMemoryDatabaseState);
@@ -375,19 +517,28 @@ async function startServer() {
       }
     }
 
+    // Garante que a equipe nunca fique vazia (inicializa com o Dono Marcos Lancerotti)
+    if (!Array.isArray(inMemoryDatabaseState?.teamMembers) || inMemoryDatabaseState.teamMembers.length === 0) {
+      inMemoryDatabaseState.teamMembers = [DEFAULT_OWNER_MEMBER];
+      persistDatabaseState(inMemoryDatabaseState);
+      scheduleSyncToFirestore({ teamMembers: inMemoryDatabaseState.teamMembers });
+      console.log("[Database Server] Equipe inicializada com o Dono da Agência (Marcos Lancerotti).");
+    }
+
     if (!inMemoryDatabaseState) {
       inMemoryDatabaseState = {};
     }
   }
 
-  // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Cache em disco + Firestore)
+  // Central Database (compartilha clientes, demandas, equipe e finanças entre todos os computadores via Cache em disco + Firestore)
   app.get("/api/database", async (_req, res) => {
     let data = getDatabaseState();
     const hasClients = Array.isArray(data.clients) && data.clients.length > 0;
     const hasDemands = Array.isArray(data.demands) && data.demands.length > 0;
+    const hasTeamMembers = Array.isArray(data.teamMembers) && data.teamMembers.length > 0;
 
-    // Se clientes OU demandas estiverem vazios na memória, tenta carregar do Firestore sob demanda
-    if (!hasClients || !hasDemands) {
+    // Se clientes, demandas OU equipe estiverem vazios na memória, tenta carregar do Firestore sob demanda
+    if (!hasClients || !hasDemands || !hasTeamMembers) {
       try {
         const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
         if (remote) {
@@ -435,7 +586,7 @@ async function startServer() {
         if (ALLOWED_COLLECTIONS.includes(key) && body[key] !== undefined && body[key] !== null) {
           // Proteção atômica: Impede que um dispositivo recém-aberto com lista vazia sobrescreva dados cadastrados no banco
           if (
-            (key === "demands" || key === "clients") &&
+            (key === "demands" || key === "clients" || key === "teamMembers") &&
             Array.isArray(body[key]) &&
             body[key].length === 0 &&
             Array.isArray(currentData[key]) &&
@@ -446,6 +597,32 @@ async function startServer() {
           }
           sanitizedUpdate[key] = body[key];
         }
+      }
+
+      // Converte fotos em base64 da equipe para arquivos leves em disco
+      if (Array.isArray(sanitizedUpdate.teamMembers)) {
+        sanitizedUpdate.teamMembers = sanitizedUpdate.teamMembers.map((m: any) => {
+          if (m && typeof m.avatar === "string" && m.avatar.startsWith("data:image/")) {
+            const savedUrl = saveBase64Image(m.avatar, `member-${m.id || "avatar"}`);
+            if (savedUrl) {
+              return { ...m, avatar: savedUrl };
+            }
+          }
+          return m;
+        });
+      }
+
+      // Converte fotos em base64 de clientes para arquivos leves em disco
+      if (Array.isArray(sanitizedUpdate.clients)) {
+        sanitizedUpdate.clients = sanitizedUpdate.clients.map((c: any) => {
+          if (c && typeof c.avatar === "string" && c.avatar.startsWith("data:image/")) {
+            const savedUrl = saveBase64Image(c.avatar, `client-${c.id || "avatar"}`);
+            if (savedUrl) {
+              return { ...c, avatar: savedUrl };
+            }
+          }
+          return c;
+        });
       }
 
       const merged = {
@@ -462,9 +639,12 @@ async function startServer() {
 
       // 3. Notifica todos os computadores e celulares conectados via WebSocket
       try {
-        broadcast({ type: "database:update", data: merged, demands: merged.demands });
+        broadcast({ type: "database:update", data: merged, demands: merged.demands, teamMembers: merged.teamMembers });
         if (sanitizedUpdate.demands) {
           broadcast({ type: "demands:update", demands: merged.demands });
+        }
+        if (sanitizedUpdate.teamMembers) {
+          broadcast({ type: "team_members:update", teamMembers: merged.teamMembers });
         }
       } catch {}
 
@@ -472,6 +652,109 @@ async function startServer() {
     } catch (e: any) {
       console.error("Erro ao salvar data/database.json:", e);
       res.status(500).json({ success: false, error: "Erro ao persistir dados no banco central." });
+    }
+  });
+
+  // Upload dedicado de foto de perfil / avatar com salvamento físico permanente
+  app.post("/api/upload-avatar", (req, res) => {
+    try {
+      const { image, memberId } = req.body || {};
+      if (!image || typeof image !== "string") {
+        return res.status(400).json({ success: false, error: "Nenhuma imagem fornecida." });
+      }
+      if (image.startsWith("data:image/")) {
+        const url = saveBase64Image(image, `member-${memberId || "avatar"}`);
+        if (url) {
+          return res.json({ success: true, url });
+        }
+        return res.status(500).json({ success: false, error: "Falha ao gravar arquivo de imagem." });
+      }
+      return res.json({ success: true, url: image });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Erro no upload de foto" });
+    }
+  });
+
+  // Endpoints dedicados para Equipe (Team Members)
+  app.get("/api/team-members", async (_req, res) => {
+    let db = getDatabaseState();
+    let teamMembers = Array.isArray(db.teamMembers) ? db.teamMembers : [];
+    if (teamMembers.length === 0) {
+      try {
+        const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
+        if (remote && Array.isArray(remote.teamMembers) && remote.teamMembers.length > 0) {
+          db = mergeDatabaseStates(db, remote);
+          persistDatabaseState(db);
+          teamMembers = db.teamMembers;
+        }
+      } catch {}
+    }
+    if (teamMembers.length === 0) {
+      teamMembers = [DEFAULT_OWNER_MEMBER];
+      db.teamMembers = teamMembers;
+      persistDatabaseState(db);
+      scheduleSyncToFirestore({ teamMembers });
+    }
+    res.json({ success: true, data: teamMembers, count: teamMembers.length });
+  });
+
+  app.post("/api/team-members", async (req, res) => {
+    try {
+      const { member, teamMembers } = req.body || {};
+      const current = getDatabaseState();
+      let currentTeam: any[] = Array.isArray(current.teamMembers) && current.teamMembers.length > 0
+        ? [...current.teamMembers]
+        : [DEFAULT_OWNER_MEMBER];
+
+      let incoming: any[] = [];
+      if (Array.isArray(teamMembers)) {
+        incoming = teamMembers;
+      } else if (member && member.id) {
+        incoming = [member];
+      } else if (Array.isArray(req.body)) {
+        incoming = req.body;
+      } else {
+        return res.status(400).json({ success: false, error: "Colaborador ou lista inválida." });
+      }
+
+      // Converte fotos em base64 para arquivos locais leves
+      const processed = incoming.map((m: any) => {
+        if (m && typeof m.avatar === "string" && m.avatar.startsWith("data:image/")) {
+          const url = saveBase64Image(m.avatar, `member-${m.id || "avatar"}`);
+          if (url) return { ...m, avatar: url };
+        }
+        return m;
+      });
+
+      if (Array.isArray(teamMembers) || Array.isArray(req.body)) {
+        currentTeam = processed;
+      } else {
+        const single = processed[0];
+        const idx = currentTeam.findIndex((m: any) => m.id === single.id || (isOwnerOrMarcos(m) && isOwnerOrMarcos(single)));
+        if (idx >= 0) {
+          currentTeam[idx] = { ...currentTeam[idx], ...single };
+        } else {
+          currentTeam.push(single);
+        }
+      }
+
+      const updated = {
+        ...current,
+        teamMembers: currentTeam,
+        updatedAt: Date.now(),
+      };
+      persistDatabaseState(updated);
+      scheduleSyncToFirestore({ teamMembers: currentTeam });
+
+      try {
+        broadcast({ type: "team_members:update", teamMembers: currentTeam });
+        broadcast({ type: "database:update", data: updated, teamMembers: currentTeam });
+      } catch {}
+
+      res.json({ success: true, data: currentTeam, count: currentTeam.length });
+    } catch (e: any) {
+      console.error("Erro ao salvar membro(s) da equipe:", e);
+      res.status(500).json({ success: false, error: "Falha ao gravar colaborador." });
     }
   });
 
