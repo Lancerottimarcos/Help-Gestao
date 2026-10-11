@@ -138,7 +138,11 @@ export async function saveFirestoreData(data: Record<string, any>, collectionNam
       }
       fields.updatedAt = toFirestoreRestValue(Date.now());
 
-      const restUrl = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${dbId}/documents/${collectionName}/${docId}?key=${config.apiKey}`;
+      const fieldKeys = Object.keys(fields);
+      const updateMaskParams = fieldKeys
+        .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
+        .join('&');
+      const restUrl = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${dbId}/documents/${collectionName}/${docId}?key=${config.apiKey}&${updateMaskParams}`;
       const res = await fetch(restUrl, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

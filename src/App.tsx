@@ -678,9 +678,19 @@ export function Layout({ children, onLogout }: LayoutProps) {
         }
 
         // Sincronização segura de DEMANDAS (sem sobrescrita destrutiva)
-        if (remoteData.demands && Array.isArray(remoteData.demands)) {
+        let remoteDemandsList = (remoteData.demands && Array.isArray(remoteData.demands)) ? remoteData.demands : [];
+        if (remoteDemandsList.length === 0) {
+          try {
+            const direct = await serverDbService.fetchDemandsDirectly();
+            if (Array.isArray(direct) && direct.length > 0) {
+              remoteDemandsList = direct;
+            }
+          } catch {}
+        }
+
+        if (remoteDemandsList.length > 0) {
           const deletedDemandIds = getDeletedDemandIds();
-          const cleanRemote = remoteData.demands.filter((d) => !deletedDemandIds.has(d.id));
+          const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
 
           setDemands((prev) => {
             const cleanPrev = prev.filter((d) => !deletedDemandIds.has(d.id));
@@ -930,8 +940,18 @@ export function Layout({ children, onLogout }: LayoutProps) {
           // 2. DEMANDAS (Mescla inteligente: mantém demandas locais pendentes sem perda de dados)
           const deletedDemandIds = getDeletedDemandIds();
           const cleanLocalDemands = localDemands.filter((d) => !deletedDemandIds.has(d.id));
-          if (remoteData.demands && Array.isArray(remoteData.demands)) {
-            const cleanRemote = remoteData.demands.filter((d) => !deletedDemandIds.has(d.id));
+          let remoteDemandsList = (remoteData.demands && Array.isArray(remoteData.demands)) ? remoteData.demands : [];
+          if (remoteDemandsList.length === 0) {
+            try {
+              const directDemands = await serverDbService.fetchDemandsDirectly();
+              if (Array.isArray(directDemands) && directDemands.length > 0) {
+                remoteDemandsList = directDemands;
+              }
+            } catch {}
+          }
+
+          if (remoteDemandsList.length > 0) {
+            const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
             const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
             const localPending = cleanLocalDemands.filter((d) => !remoteMap.has(d.id));
             const merged = [...cleanRemote, ...localPending];
@@ -1086,13 +1106,43 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
     initData();
 
-    // Sincronização periódica a cada 15 segundos para manter abas anônimas e múltiplos dispositivos alinhados
+    // Sincronização periódica a cada 5 segundos para manter todos os computadores e celulares alinhados
     const pollInterval = setInterval(() => {
       handleSyncWithSupabase(true);
       syncWithServerDb(true);
-    }, 15000);
+    }, 5000);
 
-    // Sincroniza imediatamente quando a janela / aba do navegador ganha foco (ao alternar para guia anônima)
+    // Sincronização em tempo real via WebSocket para múltiplos computadores e celulares
+    let ws: WebSocket | null = null;
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'demands:update' && Array.isArray(msg.demands)) {
+            const deletedIds = getDeletedDemandIds();
+            const cleanIncoming = msg.demands.filter((d: DemandItem) => !deletedIds.has(d.id));
+            setDemands((prev) => {
+              const prevClean = prev.filter((d) => !deletedIds.has(d.id));
+              const remoteMap = new Map(cleanIncoming.map((d: DemandItem) => [d.id, d]));
+              const localPending = prevClean.filter((d) => !remoteMap.has(d.id));
+              const merged = [...cleanIncoming, ...localPending];
+              try {
+                localStorage.setItem('agency_demands', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          } else if (msg.type === 'database:update') {
+            syncWithServerDb(true);
+          }
+        } catch {}
+      };
+    } catch {}
+
+    // Sincroniza imediatamente quando a janela / aba do navegador ganha foco (ao alternar entre abas ou celulares)
     const handleFocus = () => {
       handleSyncWithSupabase(true);
       syncWithServerDb(true);
@@ -1103,6 +1153,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
     return () => {
       isMounted = false;
       clearInterval(pollInterval);
+      if (ws) {
+        try {
+          ws.close();
+        } catch {}
+      }
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('visibilitychange', handleFocus);
     };
@@ -1496,6 +1551,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
             localStorage.setItem('agency_demands', JSON.stringify(result));
           } catch {}
           serverDbService.saveDatabase({ demands: result }, true);
+          serverDbService.saveDemandsDirectly(result);
           return result;
         }
       }
@@ -1521,6 +1577,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
         localStorage.setItem('agency_demands', JSON.stringify(result));
       } catch {}
       serverDbService.saveDatabase({ demands: result }, true);
+      serverDbService.saveDemandsDirectly(result);
       return result;
     });
 
@@ -1535,7 +1592,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients });
+      serverDbService.saveDatabase({ clients: updatedClients, demands: nextDemands });
       return updatedClients;
     });
 
@@ -1560,11 +1617,14 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
+      serverDbService.saveDatabase({ demands: updated }, true);
+      serverDbService.saveDemandsDirectly(updated);
       return updated;
     });
 
     const demandsToSave = nextDemands.length > 0 ? nextDemands : [newDemand, ...demands.filter(d => d.id !== newDemand.id)];
     serverDbService.saveDatabase({ demands: demandsToSave }, true);
+    serverDbService.saveDemandsDirectly(demandsToSave);
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
@@ -1581,7 +1641,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients });
+      serverDbService.saveDatabase({ clients: updatedClients, demands: demandsToSave });
       return updatedClients;
     });
 
@@ -1658,19 +1718,23 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
     lastLocalDemandUpdateRef.current = Date.now();
 
+    let updatedDemandsList: DemandItem[] = [];
     setDemands((prev) => {
       const updated = prev.map((item) => (item.id === finalDemand.id ? finalDemand : item));
+      updatedDemandsList = updated;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
       serverDbService.saveDatabase({ demands: updated }, true);
+      serverDbService.saveDemandsDirectly(updated);
       return updated;
     });
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
     setClients((prevClients) => {
+      const currentDemands = updatedDemandsList.length > 0 ? updatedDemandsList : demands.map((item) => (item.id === finalDemand.id ? finalDemand : item));
       const updatedClients = prevClients.map((c) => {
-        const count = demands.map((item) => (item.id === finalDemand.id ? finalDemand : item)).filter(d => {
+        const count = currentDemands.filter(d => {
           return (d.clientId === c.id || d.client.toLowerCase() === c.name.toLowerCase()) && d.columnId !== 'concluidas';
         }).length;
         return { ...c, activeDemandsCount: count };
@@ -1678,7 +1742,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients }, true);
+      serverDbService.saveDatabase({ clients: updatedClients, demands: currentDemands }, true);
       return updatedClients;
     });
 
@@ -1937,6 +2001,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
       serverDbService.saveDatabase({ demands: updated }, true);
+      serverDbService.saveDemandsDirectly(updated);
       return updated;
     });
 
@@ -1950,7 +2015,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients });
+      serverDbService.saveDatabase({ clients: updatedClients, demands: remainingDemands });
       return updatedClients;
     });
 
@@ -2913,13 +2978,22 @@ export default function App() {
             localStorage.setItem('agency_clients', JSON.stringify(remoteData.clients));
           } catch {}
         }
-        if (remoteData.demands && Array.isArray(remoteData.demands) && remoteData.demands.length > 0) {
-          setPortalDemands(remoteData.demands);
+        let remoteDemands = (remoteData.demands && Array.isArray(remoteData.demands) && remoteData.demands.length > 0)
+          ? remoteData.demands
+          : [];
+        if (remoteDemands.length === 0) {
+          try {
+            const direct = await serverDbService.fetchDemandsDirectly();
+            if (Array.isArray(direct) && direct.length > 0) remoteDemands = direct;
+          } catch {}
+        }
+        if (remoteDemands.length > 0) {
+          setPortalDemands(remoteDemands);
           try {
             const rawLocal = localStorage.getItem('agency_demands');
             const localCount = rawLocal ? JSON.parse(rawLocal)?.length || 0 : 0;
-            if (remoteData.demands.length >= localCount) {
-              localStorage.setItem('agency_demands', JSON.stringify(remoteData.demands));
+            if (remoteDemands.length >= localCount) {
+              localStorage.setItem('agency_demands', JSON.stringify(remoteDemands));
             }
           } catch {}
         }

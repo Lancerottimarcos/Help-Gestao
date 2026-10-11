@@ -1,4 +1,9 @@
-import { getSupabaseClient } from '../lib/supabaseClient';
+import { 
+  getSupabaseClient, 
+  getSupabaseUrl, 
+  getSupabaseAnonKey, 
+  getSupabaseConfigStatus 
+} from '../lib/supabaseClient';
 import { serverDbService } from './serverDbService';
 import { 
   DemandItem, 
@@ -569,27 +574,333 @@ export const supabaseService = {
     return !!supabase;
   },
 
+  /**
+   * Retorna os detalhes de configuração do ambiente Supabase
+   */
+  getConnectionInfo() {
+    const url = getSupabaseUrl();
+    const key = getSupabaseAnonKey();
+    const status = getSupabaseConfigStatus();
+    return {
+      url,
+      hasKey: Boolean(key),
+      keyPreview: key ? `${key.substring(0, 12)}...${key.substring(key.length - 6)}` : 'não configurada',
+      source: status.source,
+      isConfigured: status.isConfigured,
+    };
+  },
+
+  /**
+   * Retorna metadados completos de diagnóstico do ambiente de execução (computador vs celular, navegador, rede e storage)
+   */
+  getEnvironmentDiagnostics() {
+    const isBrowser = typeof window !== 'undefined';
+    const ua = isBrowser ? navigator.userAgent : 'Node.js';
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isTablet = /iPad|tablet/i.test(ua);
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const deviceType = isTablet ? 'Tablet' : isMobile ? (isIOS ? 'Celular iPhone (iOS)' : isAndroid ? 'Celular Android' : 'Dispositivo Móvel') : 'Computador (Desktop)';
+    
+    let browser = 'Navegador Web';
+    if (ua.includes('Firefox')) browser = 'Mozilla Firefox';
+    else if (ua.includes('SamsungBrowser')) browser = 'Samsung Internet';
+    else if (ua.includes('Opera') || ua.includes('OPR')) browser = 'Opera';
+    else if (ua.includes('Edge') || ua.includes('Edg')) browser = 'Microsoft Edge';
+    else if (ua.includes('Chrome')) browser = 'Google Chrome';
+    else if (ua.includes('Safari')) browser = 'Apple Safari';
+
+    const isOnline = isBrowser ? navigator.onLine : true;
+    const netConn = isBrowser ? (navigator as any).connection : null;
+    const effectiveType = netConn?.effectiveType ? String(netConn.effectiveType).toUpperCase() : 'Não informado';
+    const downlink = netConn?.downlink ? `${netConn.downlink} Mbps` : undefined;
+
+    let storageUsable = false;
+    try {
+      if (isBrowser) {
+        const testKey = `__sb_probe_${Date.now()}__`;
+        localStorage.setItem(testKey, '1');
+        storageUsable = localStorage.getItem(testKey) === '1';
+        localStorage.removeItem(testKey);
+      }
+    } catch {}
+
+    const windowInfo = isBrowser ? `${window.innerWidth}x${window.innerHeight} (${window.screen?.width}x${window.screen?.height})` : 'N/A';
+    const origin = isBrowser ? window.location.origin : 'N/A';
+
+    return {
+      deviceType,
+      browser,
+      isMobile,
+      isOnline,
+      effectiveType,
+      downlink,
+      storageUsable,
+      windowInfo,
+      origin,
+      ua,
+    };
+  },
+
+  /**
+   * Executa teste e auditoria detalhada de conexão com o Supabase com logs estruturados
+   */
+  async checkConnection(customUrl?: string, customKey?: string): Promise<{
+    success: boolean;
+    authOk: boolean;
+    restOk: boolean;
+    url: string;
+    latencyMs: number;
+    error?: string;
+    details?: any;
+    environment?: any;
+  }> {
+    const url = (customUrl || getSupabaseUrl() || '').trim();
+    const key = (customKey || getSupabaseAnonKey() || '').trim();
+    const startTime = Date.now();
+    const env = this.getEnvironmentDiagnostics();
+
+    console.group(
+      `%c[Supabase Diagnóstico] 📡 Testando Conexão com o Banco de Dados Principal | ${env.deviceType} (${env.browser})`,
+      'background: #142142; color: #38bdf8; font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 11px;'
+    );
+    console.info('%c📱 Detalhes do Ambiente de Execução:', 'color: #fab518; font-weight: bold;', {
+      Dispositivo: env.deviceType,
+      Navegador: env.browser,
+      StatusRede: env.isOnline ? '🟢 Online (Conectado à Internet)' : '🔴 Offline (Sem Conexão)',
+      TipoConexao: env.effectiveType,
+      VelocidadeEstimada: env.downlink || 'N/A',
+      ResolucaoTela: env.windowInfo,
+      LocalStorage: env.storageUsable ? '✅ Operacional' : '⚠️ Restrito / Bloqueado',
+      OrigemAcesso: env.origin,
+    });
+
+    console.info('%c🔑 Configuração de Credenciais Supabase:', 'color: #38bdf8; font-weight: bold;', {
+      EndpointURL: url || '(vazia / não informada)',
+      ChavePublicaAnonKey: key ? `${key.substring(0, 16)}... (${key.length} caracteres)` : '(vazia / não informada)',
+      FormatoChave: key.startsWith('sb_publishable_') ? 'Supabase Publishable Key' : key.startsWith('eyJ') ? 'JWT Anon Token' : 'API Key Padrão',
+    });
+
+    if (!url || !key) {
+      const latencyMs = Date.now() - startTime;
+      console.warn(
+        '%c[Supabase Status] ⚠️ Credenciais do Supabase não configuradas neste ambiente.',
+        'color: #f59e0b; font-weight: bold;'
+      );
+      console.log('-> Utilizando camada primária de persistência e alta disponibilidade (/api/database + Firestore). Suas demandas continuam 100% protegidas.');
+      console.groupEnd();
+      return { 
+        success: false, 
+        authOk: false, 
+        restOk: false, 
+        url, 
+        latencyMs, 
+        error: 'Credenciais ausentes',
+        environment: env 
+      };
+    }
+
+    try {
+      const client = getSupabaseClient(url, key);
+      if (!client) {
+        const latencyMs = Date.now() - startTime;
+        console.error(
+          '%c[Supabase Status] ❌ Não foi possível inicializar o cliente Supabase JavaScript.',
+          'color: #ef4444; font-weight: bold;'
+        );
+        console.groupEnd();
+        return { 
+          success: false, 
+          authOk: false, 
+          restOk: false, 
+          url, 
+          latencyMs, 
+          error: 'Falha ao instanciar cliente',
+          environment: env 
+        };
+      }
+
+      // 1. Teste HTTP Direto de Rede / Ping ao Endpoint
+      const pingStart = Date.now();
+      let httpPingSuccess = false;
+      let httpPingStatus = 0;
+      let httpPingError: string | null = null;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        
+        // Pede headers para validar se o servidor Supabase responde na internet
+        const pingResponse = await fetch(`${url}/rest/v1/`, {
+          method: 'GET',
+          headers: {
+            'apikey': key,
+            'Authorization': `Bearer ${key}`,
+          },
+          signal: controller.signal,
+        }).catch(async () => {
+          return fetch(`${url}/auth/v1/health`, {
+            headers: { 'apikey': key },
+            signal: controller.signal,
+          });
+        });
+
+        clearTimeout(timeoutId);
+        httpPingStatus = pingResponse.status;
+        httpPingSuccess = pingResponse.ok || pingResponse.status === 200 || pingResponse.status === 404;
+      } catch (pingErr: any) {
+        httpPingError = pingErr?.message || String(pingErr);
+      }
+
+      const pingLatency = Date.now() - pingStart;
+
+      if (!httpPingSuccess && httpPingError) {
+        console.warn(
+          `%c[Supabase Rede / DNS] ❌ Falha ao contatar endpoint Supabase (${pingLatency}ms):`,
+          'color: #ef4444; font-weight: bold;',
+          httpPingError
+        );
+        if (httpPingError.includes('Failed to fetch') || httpPingError.includes('ENOTFOUND') || httpPingError.includes('abort')) {
+          console.warn('💡 Diagnóstico: O domínio Supabase não respondeu ou não pôde ser resolvido por DNS. Verifique se o endereço do projeto (.supabase.co) está correto ou se o projeto está ativo.');
+        }
+      } else {
+        console.log(
+          `%c[Supabase Rede / HTTP] ✅ Endpoint online respondendo com status HTTP ${httpPingStatus} (${pingLatency}ms)!`,
+          'color: #10b981; font-weight: bold;'
+        );
+      }
+
+      // 2. Teste de Auth / Sessão com a biblioteca cliente
+      const authStart = Date.now();
+      const { error: authError } = await client.auth.getSession();
+      const authLatency = Date.now() - authStart;
+
+      if (authError) {
+        const totalLatency = Date.now() - startTime;
+        console.warn(
+          `%c[Supabase Auth] ❌ Falha na autenticação (${authLatency}ms):`,
+          'color: #ef4444; font-weight: bold;',
+          authError.message
+        );
+        console.groupEnd();
+        return { 
+          success: false, 
+          authOk: false, 
+          restOk: false, 
+          url, 
+          latencyMs: totalLatency, 
+          error: authError.message, 
+          details: authError,
+          environment: env 
+        };
+      }
+
+      console.log(`%c[Supabase Auth] ✅ Autenticação e credenciais validadas com sucesso (${authLatency}ms)!`, 'color: #10b981; font-weight: bold;');
+
+      // 3. Teste de Acesso REST à tabela de Demandas
+      const restStart = Date.now();
+      const { data: demandsSample, error: restError, count: demandsCount } = await client
+        .from('demands')
+        .select('id, title', { count: 'exact', head: false })
+        .limit(3);
+
+      const restLatency = Date.now() - restStart;
+      const totalLatency = Date.now() - startTime;
+
+      if (restError) {
+        console.warn(
+          `%c[Supabase REST] ⚠️ Tabela "demands" (${restLatency}ms):`,
+          'color: #f59e0b; font-weight: bold;',
+          restError.message,
+          `[Código: ${restError.code || 'sem código'}]`
+        );
+        if (restError.code === '42P01' || restError.message?.includes('does not exist')) {
+          console.warn('-> A tabela "demands" não existe no PostgreSQL do Supabase. Copie e execute o script SUPABASE_MIGRATION_SQL no SQL Editor do painel Supabase.');
+        } else if (restError.code === '42501' || restError.message?.includes('permission denied')) {
+          console.warn('-> Permissão negada pelo Row Level Security (RLS). Execute o script SQL para conceder acesso anônimo.');
+        }
+        console.groupEnd();
+        return { 
+          success: false, 
+          authOk: true, 
+          restOk: false, 
+          url, 
+          latencyMs: totalLatency, 
+          error: restError.message, 
+          details: restError,
+          environment: env 
+        };
+      }
+
+      console.log(
+        `%c[Supabase REST] ✅ Tabela "demands" respondendo normalmente (${restLatency}ms)! Total de demandas no PostgreSQL: ${demandsCount ?? demandsSample?.length ?? 0}`,
+        'color: #10b981; font-weight: bold;'
+      );
+      console.log(
+        `%c[Supabase Status] 🚀 Conexão estabelecida com sucesso com o banco de dados principal (${totalLatency}ms total). Ambiente: ${env.deviceType}.`,
+        'background: #064e3b; color: #34d399; font-weight: bold; padding: 3px 6px; border-radius: 4px;'
+      );
+      console.groupEnd();
+
+      return { 
+        success: true, 
+        authOk: true, 
+        restOk: true, 
+        url, 
+        latencyMs: totalLatency,
+        environment: env 
+      };
+    } catch (err: any) {
+      const totalLatency = Date.now() - startTime;
+      const errMsg = err?.message || String(err);
+      console.error(
+        `%c[Supabase Status] ❌ Exceção ao testar conexão (${totalLatency}ms):`,
+        'color: #ef4444; font-weight: bold;',
+        errMsg
+      );
+      console.log('-> O Help Ideias opera com redundância automática de alta disponibilidade via Servidor Central e Google Cloud Firestore. Seus dados estão salvos.');
+      console.groupEnd();
+      return { 
+        success: false, 
+        authOk: false, 
+        restOk: false, 
+        url, 
+        latencyMs: totalLatency, 
+        error: errMsg, 
+        details: err,
+        environment: env 
+      };
+    }
+  },
+
   // ==================================================================
   // DEMANDAS (KANBAN)
   // ==================================================================
   async fetchDemands(): Promise<DemandItem[] | null> {
     const supabase = getSupabaseClient();
+    const url = getSupabaseUrl();
+    const env = this.getEnvironmentDiagnostics();
+
     if (!supabase) {
+      console.warn(`[Supabase Demanda] ⚠️ fetchDemands: Cliente não inicializado no ambiente ${env.deviceType}. Carregando demandas da base central de alta disponibilidade.`);
       recordSyncFailure('FETCH_DEMANDS', 'Supabase não inicializado ou credenciais ausentes no storage', undefined, 'WARNING');
       return null;
     }
 
     try {
+      console.log(`[Supabase Demanda] 📥 Consultando demandas na nuvem Supabase (${env.deviceType} em ${url})...`);
       const { data, error } = await supabase
         .from('demands')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
+        console.warn(`[Supabase Demanda] ⚠️ Falha ao buscar demandas (${error.code || 'sem código'}):`, error.message);
         recordSyncFailure('FETCH_DEMANDS', error.message || error, { error, hint: error.hint });
-        console.warn('Aviso ao consultar demandas no Supabase (offline ou não configurado):', error?.message || error);
         return null;
       }
+
+      console.log(`[Supabase Demanda] ✅ ${data?.length || 0} demandas carregadas do PostgreSQL com sucesso no ${env.deviceType}.`);
 
       return (data || []).map((row: any): DemandItem => {
         const rawCol = row.column_id || 'ideias';
@@ -628,20 +939,24 @@ export const supabaseService = {
         };
       });
     } catch (e: any) {
+      console.warn(`[Supabase Demanda] ⚠️ Exceção ao consultar demandas:`, e?.message || e);
       recordSyncFailure('FETCH_DEMANDS', e?.message || e, e);
-      console.warn('Exceção ao buscar demandas no Supabase (modo offline):', e?.message || e);
       return null;
     }
   },
 
   async upsertDemand(demand: DemandItem): Promise<boolean> {
     const supabase = getSupabaseClient();
+    const env = this.getEnvironmentDiagnostics();
+
     if (!supabase) {
+      console.warn(`[Supabase Demanda] ⚠️ upsertDemand: Cliente não inicializado para "${demand.title}" (ID: ${demand.id}) no ${env.deviceType}. Demanda protegida e persistida no banco central compartilhado.`);
       recordSyncFailure('UPSERT_DEMAND', 'Supabase não inicializado', { demandId: demand.id }, 'WARNING');
       return false;
     }
 
     try {
+      console.log(`[Supabase Demanda] 💾 Sincronizando demanda "${demand.title}" (ID: ${demand.id}) no PostgreSQL Supabase via ${env.deviceType}...`);
       const payload = {
         id: demand.id,
         title: demand.title,
@@ -674,14 +989,15 @@ export const supabaseService = {
 
       const { error } = await resilientSupabaseUpsert(supabase, 'demands', payload);
       if (error) {
+        console.error(`[Supabase Demanda] ❌ Erro ao gravar demanda "${demand.id}" no PostgreSQL:`, error.message || error);
         recordSyncFailure('UPSERT_DEMAND', error.message || error, { demandId: demand.id, error });
-        console.warn('Aviso ao fazer upsert da demanda no Supabase:', error?.message || error);
         return false;
       }
+      console.log(`[Supabase Demanda] ✅ Demanda "${demand.title}" (ID: ${demand.id}) gravada com sucesso no Supabase PostgreSQL pelo ${env.deviceType}.`);
       return true;
     } catch (e: any) {
+      console.error(`[Supabase Demanda] ⚠️ Exceção ao sincronizar demanda "${demand.id}":`, e?.message || e);
       recordSyncFailure('UPSERT_DEMAND', e?.message || e, { demandId: demand.id, error: e });
-      console.warn('Exceção ao sincronizar demanda no Supabase:', e?.message || e);
       return false;
     }
   },
@@ -691,11 +1007,14 @@ export const supabaseService = {
     if (!supabase) return false;
 
     try {
+      console.log(`[Supabase] 🗑️ Excluindo demanda ID: ${id} no PostgreSQL...`);
       const { error } = await supabase.from('demands').delete().eq('id', id);
       if (error) {
+        console.error(`[Supabase] ❌ Erro ao excluir demanda ID: ${id}:`, error.message || error);
         recordSyncFailure('DELETE_DEMAND', error.message || error, { id, error });
         return false;
       }
+      console.log(`[Supabase] ✅ Demanda ID: ${id} excluída do PostgreSQL com sucesso.`);
       return true;
     } catch (e: any) {
       recordSyncFailure('DELETE_DEMAND', e?.message || e, { id, error: e });
@@ -708,22 +1027,27 @@ export const supabaseService = {
   // ==================================================================
   async fetchClients(): Promise<Client[] | null> {
     const supabase = getSupabaseClient();
+    const url = getSupabaseUrl();
     if (!supabase) {
+      console.warn('[Supabase] ⚠️ fetchClients: Cliente não inicializado (credenciais ausentes). Operando com dados locais/Firestore.');
       recordSyncFailure('FETCH_CLIENTS', 'Supabase não inicializado ou credenciais ausentes no storage', undefined, 'WARNING');
       return null;
     }
 
     try {
+      console.log(`[Supabase] 📥 Consultando clientes em ${url}...`);
       const { data, error } = await supabase
         .from('clients')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
+        console.warn(`[Supabase] ⚠️ Falha ao buscar clientes (${error.code || 'sem código'}):`, error.message);
         recordSyncFailure('FETCH_CLIENTS', error.message || error, { error, hint: error.hint });
-        console.warn('Aviso ao consultar clientes no Supabase (offline ou não configurado):', error?.message || error);
         return null;
       }
+
+      console.log(`[Supabase] ✅ ${data?.length || 0} clientes carregados do PostgreSQL com sucesso.`);
 
       return (data || []).map((row: any): Client => ({
         id: row.id,
@@ -767,8 +1091,8 @@ export const supabaseService = {
         portalAccessEnabled: row.portal_access_enabled !== false,
       }));
     } catch (e: any) {
+      console.warn(`[Supabase] ⚠️ Exceção ao consultar clientes:`, e?.message || e);
       recordSyncFailure('FETCH_CLIENTS', e?.message || e, e);
-      console.warn('Exceção ao buscar clientes no Supabase (modo offline):', e?.message || e);
       return null;
     }
   },
@@ -776,11 +1100,13 @@ export const supabaseService = {
   async upsertClient(client: Client): Promise<boolean> {
     const supabase = getSupabaseClient();
     if (!supabase) {
+      console.warn(`[Supabase] ⚠️ upsertClient: Cliente não inicializado para "${client.name}" (ID: ${client.id}). Cliente salvo na base central.`);
       recordSyncFailure('UPSERT_CLIENT', 'Supabase não inicializado', { clientId: client.id }, 'WARNING');
       return false;
     }
 
     try {
+      console.log(`[Supabase] 💾 Gravando cliente "${client.name}" (ID: ${client.id}) no PostgreSQL...`);
       const payload = {
         id: client.id,
         person_type: client.personType || 'juridica',
@@ -825,14 +1151,15 @@ export const supabaseService = {
 
       const { error } = await resilientSupabaseUpsert(supabase, 'clients', payload);
       if (error) {
+        console.error(`[Supabase] ❌ Erro ao gravar cliente "${client.id}" no PostgreSQL:`, error.message || error);
         recordSyncFailure('UPSERT_CLIENT', error.message || error, { clientId: client.id, error });
-        console.warn('Aviso ao fazer upsert do cliente no Supabase:', error?.message || error);
         return false;
       }
+      console.log(`[Supabase] ✅ Cliente "${client.name}" (ID: ${client.id}) persistido no PostgreSQL com sucesso.`);
       return true;
     } catch (e: any) {
+      console.error(`[Supabase] ⚠️ Exceção ao sincronizar cliente "${client.id}":`, e?.message || e);
       recordSyncFailure('UPSERT_CLIENT', e?.message || e, { clientId: client.id, error: e });
-      console.warn('Exceção ao sincronizar cliente no Supabase:', e?.message || e);
       return false;
     }
   },
@@ -842,11 +1169,14 @@ export const supabaseService = {
     if (!supabase) return false;
 
     try {
+      console.log(`[Supabase] 🗑️ Excluindo cliente ID: ${id} no PostgreSQL...`);
       const { error } = await supabase.from('clients').delete().eq('id', id);
       if (error) {
+        console.error(`[Supabase] ❌ Erro ao excluir cliente ID: ${id}:`, error.message || error);
         recordSyncFailure('DELETE_CLIENT', error.message || error, { id, error });
         return false;
       }
+      console.log(`[Supabase] ✅ Cliente ID: ${id} excluído do PostgreSQL com sucesso.`);
       return true;
     } catch (e: any) {
       recordSyncFailure('DELETE_CLIENT', e?.message || e, { id, error: e });

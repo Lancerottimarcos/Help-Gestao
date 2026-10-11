@@ -384,7 +384,19 @@ export const serverDbService = {
       if (res.ok) {
         const json: DatabaseApiResponse = await res.json();
         if (json.success && json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0) {
-          return json.data;
+          const dbData = json.data;
+          if (!Array.isArray(dbData.demands) || dbData.demands.length === 0) {
+            try {
+              const demandsRes = await fetch('/api/demands');
+              if (demandsRes.ok) {
+                const demandsJson = await demandsRes.json();
+                if (demandsJson.success && Array.isArray(demandsJson.data) && demandsJson.data.length > 0) {
+                  dbData.demands = demandsJson.data;
+                }
+              }
+            } catch {}
+          }
+          return dbData;
         }
       }
     } catch (err) {
@@ -405,10 +417,30 @@ export const serverDbService = {
   },
 
   /**
+   * Busca diretamente a lista de demandas cadastradas no servidor central
+   */
+  async fetchDemandsDirectly(): Promise<DemandItem[]> {
+    try {
+      const res = await fetch('/api/demands');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          return json.data;
+        }
+      }
+    } catch {}
+    return [];
+  },
+
+  /**
    * Salva os dados no servidor da aplicação de forma atômica e serializada
    * Protege contra concorrência e condições de corrida entre demandas e clientes.
    */
   saveDatabase(payload: Partial<AppDatabasePayload>, immediate = false): Promise<boolean> {
+    if (Array.isArray(payload.demands) && payload.demands.length > 0) {
+      this.saveDemandsDirectly(payload.demands).catch(() => {});
+    }
+
     return new Promise((resolve) => {
       pendingPayload = { ...pendingPayload, ...payload };
       pendingPromiseResolvers.push(resolve);

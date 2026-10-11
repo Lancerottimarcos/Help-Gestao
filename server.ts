@@ -117,7 +117,11 @@ function scheduleSyncToFirestore(payload: Record<string, any>) {
       }
       fields.updatedAt = toFirestoreRestValue(Date.now());
 
-      const url = `https://firestore.googleapis.com/v1/projects/${fbConfig.projectId}/databases/${dbId}/documents/agency_data/main_state?key=${fbConfig.apiKey}`;
+      const fieldKeys = Object.keys(fields);
+      const updateMaskParams = fieldKeys
+        .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
+        .join("&");
+      const url = `https://firestore.googleapis.com/v1/projects/${fbConfig.projectId}/databases/${dbId}/documents/agency_data/main_state?key=${fbConfig.apiKey}&${updateMaskParams}`;
       const res = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -153,6 +157,8 @@ if (!fs.existsSync(DATA_DIR)) {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  let broadcast = (_data: any, _excludeWs?: WebSocket) => {};
 
   app.use(express.json({ limit: "25mb" }));
 
@@ -283,6 +289,53 @@ async function startServer() {
     }
   }
 
+  function mergeDatabaseStates(local: any, remote: any): any {
+    if (!remote || typeof remote !== "object") return local || {};
+    if (!local || typeof local !== "object") return remote || {};
+
+    const merged = { ...local };
+    const collections = [
+      "clients",
+      "demands",
+      "services",
+      "proposals",
+      "invoices",
+      "activities",
+      "teamMembers",
+      "kanbanColumns",
+    ];
+
+    for (const col of collections) {
+      const localList = Array.isArray(local[col]) ? local[col] : [];
+      const remoteList = Array.isArray(remote[col]) ? remote[col] : [];
+
+      if (remoteList.length > 0 && localList.length === 0) {
+        merged[col] = remoteList;
+      } else if (localList.length > 0 && remoteList.length === 0) {
+        merged[col] = localList;
+      } else if (localList.length > 0 && remoteList.length > 0) {
+        // Merge por ID preservando todos os registros sem exclusão acidental
+        const remoteMap = new Map(remoteList.map((item: any) => [item.id, item]));
+        const localOnly = localList.filter((item: any) => !remoteMap.has(item.id));
+        merged[col] = [...remoteList, ...localOnly];
+      } else {
+        merged[col] = [];
+      }
+    }
+
+    // Preserva configurações e hashes
+    for (const key of Object.keys(remote)) {
+      if (!collections.includes(key) && remote[key] !== undefined && remote[key] !== null) {
+        if (merged[key] === undefined || merged[key] === null) {
+          merged[key] = remote[key];
+        }
+      }
+    }
+
+    merged.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0, Date.now());
+    return merged;
+  }
+
   async function initDatabaseState() {
     if (fs.existsSync(DB_FILE)) {
       try {
@@ -297,16 +350,13 @@ async function startServer() {
       }
     }
 
-    // Se a base local não tiver clientes ou demandas cadastrados, busca e hidrata do Firestore via REST
-    if (
-      !inMemoryDatabaseState ||
-      !Array.isArray(inMemoryDatabaseState.clients) ||
-      inMemoryDatabaseState.clients.length === 0 ||
-      !Array.isArray(inMemoryDatabaseState.demands) ||
-      inMemoryDatabaseState.demands.length === 0
-    ) {
+    // Se a base local não tiver clientes E não tiver demandas, tenta hidratar do Firestore
+    const hasLocalClients = Array.isArray(inMemoryDatabaseState?.clients) && inMemoryDatabaseState.clients.length > 0;
+    const hasLocalDemands = Array.isArray(inMemoryDatabaseState?.demands) && inMemoryDatabaseState.demands.length > 0;
+
+    if (!hasLocalClients || !hasLocalDemands) {
       try {
-        console.log("[Database Server] Hidratando dados centrais a partir do Firestore REST (agency_data/main_state)...");
+        console.log("[Database Server] Verificando sincronização com Firestore REST (agency_data/main_state)...");
         const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
         if (remote) {
           console.log(
@@ -317,23 +367,7 @@ async function startServer() {
             "Serviços:",
             remote.services?.length
           );
-          inMemoryDatabaseState = {
-            ...(inMemoryDatabaseState || {}),
-            ...remote,
-            clients:
-              Array.isArray(remote.clients) && remote.clients.length > 0
-                ? remote.clients
-                : inMemoryDatabaseState?.clients || [],
-            demands:
-              Array.isArray(remote.demands) && remote.demands.length > 0
-                ? remote.demands
-                : inMemoryDatabaseState?.demands || [],
-            services:
-              Array.isArray(remote.services) && remote.services.length > 0
-                ? remote.services
-                : inMemoryDatabaseState?.services || [],
-            updatedAt: Date.now(),
-          };
+          inMemoryDatabaseState = mergeDatabaseStates(inMemoryDatabaseState || {}, remote);
           persistDatabaseState(inMemoryDatabaseState);
         }
       } catch (err) {
@@ -349,33 +383,15 @@ async function startServer() {
   // Central Database (compartilha clientes, demandas e finanças entre todos os computadores via Cache em disco + Firestore)
   app.get("/api/database", async (_req, res) => {
     let data = getDatabaseState();
-    // Se a base em memória estiver vazia de clientes ou demandas, tenta carregar do Firestore sob demanda
-    if (
-      !data ||
-      !Array.isArray(data.clients) ||
-      data.clients.length === 0 ||
-      !Array.isArray(data.demands) ||
-      data.demands.length === 0
-    ) {
+    const hasClients = Array.isArray(data.clients) && data.clients.length > 0;
+    const hasDemands = Array.isArray(data.demands) && data.demands.length > 0;
+
+    // Se clientes OU demandas estiverem vazios na memória, tenta carregar do Firestore sob demanda
+    if (!hasClients || !hasDemands) {
       try {
         const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
         if (remote) {
-          data = {
-            ...data,
-            ...remote,
-            clients:
-              Array.isArray(remote.clients) && remote.clients.length > 0
-                ? remote.clients
-                : data?.clients || [],
-            demands:
-              Array.isArray(remote.demands) && remote.demands.length > 0
-                ? remote.demands
-                : data?.demands || [],
-            services:
-              Array.isArray(remote.services) && remote.services.length > 0
-                ? remote.services
-                : data?.services || [],
-          };
+          data = mergeDatabaseStates(data, remote);
           persistDatabaseState(data);
         }
       } catch {}
@@ -417,6 +433,17 @@ async function startServer() {
       const sanitizedUpdate: Record<string, any> = {};
       for (const key of Object.keys(body)) {
         if (ALLOWED_COLLECTIONS.includes(key) && body[key] !== undefined && body[key] !== null) {
+          // Proteção atômica: Impede que um dispositivo recém-aberto com lista vazia sobrescreva dados cadastrados no banco
+          if (
+            (key === "demands" || key === "clients") &&
+            Array.isArray(body[key]) &&
+            body[key].length === 0 &&
+            Array.isArray(currentData[key]) &&
+            currentData[key].length > 0
+          ) {
+            console.warn(`[Database Server] Proteção ativa: Prevenindo sobrescrita acidental de ${key} (${currentData[key].length} itens) com array vazio.`);
+            continue;
+          }
           sanitizedUpdate[key] = body[key];
         }
       }
@@ -433,6 +460,14 @@ async function startServer() {
       // 2. Grava de forma secundária no Google Cloud Firestore com debounce inteligente
       scheduleSyncToFirestore(sanitizedUpdate);
 
+      // 3. Notifica todos os computadores e celulares conectados via WebSocket
+      try {
+        broadcast({ type: "database:update", data: merged, demands: merged.demands });
+        if (sanitizedUpdate.demands) {
+          broadcast({ type: "demands:update", demands: merged.demands });
+        }
+      } catch {}
+
       res.json({ success: true, timestamp: Date.now() });
     } catch (e: any) {
       console.error("Erro ao salvar data/database.json:", e);
@@ -441,9 +476,19 @@ async function startServer() {
   });
 
   // Endpoints dedicados e otimizados para Demandas (Kanban)
-  app.get("/api/demands", (_req, res) => {
-    const db = getDatabaseState();
-    const demands = Array.isArray(db.demands) ? db.demands : [];
+  app.get("/api/demands", async (_req, res) => {
+    let db = getDatabaseState();
+    let demands = Array.isArray(db.demands) ? db.demands : [];
+    if (demands.length === 0) {
+      try {
+        const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
+        if (remote && Array.isArray(remote.demands) && remote.demands.length > 0) {
+          db = mergeDatabaseStates(db, remote);
+          persistDatabaseState(db);
+          demands = db.demands;
+        }
+      } catch {}
+    }
     res.json({ success: true, data: demands, count: demands.length });
   });
 
@@ -473,6 +518,12 @@ async function startServer() {
       };
       persistDatabaseState(updated);
       scheduleSyncToFirestore({ demands: currentDemands });
+
+      // Notifica todos os dispositivos em tempo real
+      try {
+        broadcast({ type: "demands:update", demands: currentDemands });
+      } catch {}
+
       res.json({ success: true, count: currentDemands.length });
     } catch (e: any) {
       console.error("Erro ao salvar demanda(s):", e);
@@ -1063,14 +1114,14 @@ async function startServer() {
 
   const connectedClients = new Map<WebSocket, any>();
 
-  function broadcast(data: any, excludeWs?: WebSocket) {
+  broadcast = (data: any, excludeWs?: WebSocket) => {
     const payload = JSON.stringify(data);
     for (const [client] of connectedClients.entries()) {
       if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
         client.send(payload);
       }
     }
-  }
+  };
 
   function getOnlineUsers() {
     const unique = new Map<string, any>();

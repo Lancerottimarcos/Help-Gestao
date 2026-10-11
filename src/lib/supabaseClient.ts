@@ -446,12 +446,46 @@ export async function runComprehensiveConnectionTest(
   }
   addLog('format', 'success', `Chave validada (${keyCheck.message})`);
 
-  // 3. Teste de Autenticação com o Supabase Auth
-  addLog('auth', 'info', 'Enviando ping de autenticação para o endpoint Supabase Auth (/auth/v1)...');
+  // 3. Teste de Autenticação e Conectividade HTTP com o Supabase
+  addLog('auth', 'info', 'Testando conectividade de rede com o endpoint Supabase (/auth/v1/health)...');
   const authStart = Date.now();
   let testClient: SupabaseClient;
 
   try {
+    // 3.1 Ping direto de rede para validar se o host existe e responde na internet
+    let pingOk = false;
+    let pingErrMessage: string | null = null;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const pingRes = await fetch(`${url}/rest/v1/`, {
+        headers: { apikey: key },
+        signal: controller.signal,
+      }).catch(async () => {
+        return fetch(`${url}/auth/v1/health`, {
+          headers: { apikey: key },
+          signal: controller.signal,
+        });
+      });
+      clearTimeout(timeoutId);
+      pingOk = pingRes.ok || pingRes.status === 200 || pingRes.status === 404;
+    } catch (netErr: any) {
+      pingErrMessage = netErr?.message || String(netErr);
+    }
+
+    if (pingErrMessage) {
+      const netLatency = Date.now() - authStart;
+      addLog('auth', 'error', `Falha de rede/DNS ao contatar ${url}: ${pingErrMessage}`, netLatency);
+      return {
+        success: false,
+        message: `Servidor inalcançável (${pingErrMessage}). Verifique se a URL do Supabase está correta e se o projeto está ativo.`,
+        latencyMs: netLatency,
+        tablesStatus: { clients: false, demands: false, services: false, proposals: false, invoices: false },
+        missingTables: ['clients', 'demands', 'services', 'proposals', 'invoices'],
+        logs,
+      };
+    }
+
     testClient = createClient(url, key, {
       auth: { persistSession: false },
     });
