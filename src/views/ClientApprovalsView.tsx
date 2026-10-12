@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   CheckCircle2, 
   Clock, 
@@ -52,13 +52,14 @@ import {
   PhoneCall,
   Instagram
 } from 'lucide-react';
-import { DemandItem, Client, UserProfile, DemandAttachment } from '../types';
+import { DemandItem, Client, UserProfile, DemandAttachment, KanbanColumn } from '../types';
 import { ClientPasswordManagerModal } from '../components/ClientPasswordManagerModal';
 import { FlamengoMockupCard } from '../components/FlamengoMockupCard';
 
 export interface ClientApprovalsViewProps {
   demands: DemandItem[];
   clients: Client[];
+  columns?: KanbanColumn[];
   currentUser: UserProfile;
   onClientApprovalAction: (
     demandId: string, 
@@ -71,14 +72,73 @@ export interface ClientApprovalsViewProps {
   onUpdateClient?: (client: Client) => void;
   onOpenDemandModal?: (demand: DemandItem) => void;
   onSelectClientDemands?: (clientName: string) => void;
+  onAddDemand?: (demand: DemandItem) => void;
 }
 
 type ViewMode = 'grade' | 'quadro' | 'feed' | 'lista' | 'calendario' | 'gantt';
 type TopNavTab = 'demandas' | 'social' | 'aprovacao' | 'notas' | 'desempenho' | 'chat' | 'ferramentas';
 
+export const isAprovacaoClienteColumn = (columnId?: string, columns?: KanbanColumn[]): boolean => {
+  if (!columnId) return false;
+  const colLower = columnId.toLowerCase().trim();
+
+  // 1. Verificação por identificadores padrão da coluna Aprovação Cliente
+  if (
+    colLower === 'aprovacao' ||
+    colLower === 'aprovacao-cliente' ||
+    colLower === 'aprovacao_cliente' ||
+    colLower === 'aprovacaocliente' ||
+    colLower === 'aprovacao cliente' ||
+    colLower === 'em aprovacao' ||
+    colLower === 'em aprovação' ||
+    colLower.includes('aprov')
+  ) {
+    return true;
+  }
+
+  // 2. Verificação pelas colunas passadas (Kanban)
+  if (columns && columns.length > 0) {
+    const matchedCol = columns.find((c) => c.id.toLowerCase().trim() === colLower);
+    if (matchedCol) {
+      const titleNormalized = (matchedCol.title || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+      if (titleNormalized.includes('aprov')) {
+        return true;
+      }
+    }
+  }
+
+  // 3. Fallback para colunas persistidas no localStorage
+  try {
+    const saved = localStorage.getItem('agency_kanban_columns');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        const matchedCol = parsed.find((c: any) => c?.id?.toLowerCase()?.trim() === colLower);
+        if (matchedCol) {
+          const titleNormalized = (matchedCol.title || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim();
+          if (titleNormalized.includes('aprov')) {
+            return true;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  return false;
+};
+
 export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
   demands,
   clients,
+  columns,
   currentUser,
   onClientApprovalAction,
   onOpenClientApprovalPortal,
@@ -87,6 +147,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
   onUpdateClient,
   onOpenDemandModal,
   onSelectClientDemands,
+  onAddDemand,
 }) => {
   // Navigation & View Mode states matching image
   const [topNavTab, setTopNavTab] = useState<TopNavTab>('aprovacao');
@@ -120,6 +181,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
   const [newPostType, setNewPostType] = useState('Stories');
   const [newPostClient, setNewPostClient] = useState('');
   const [newPostDescription, setNewPostDescription] = useState('');
+  const [newPostDate, setNewPostDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Client user scope detection
   const isClientRole = currentUser.role === 'cliente';
@@ -133,7 +195,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
     );
   }, [clients, currentUser.clientId, clientScopeName]);
 
-  // Scope demands: if client role, filter strictly by this client AND strictly by column "Aprovação Cliente"
+  // Scope demands: if client role, filter strictly by this client
   const clientAllDemands = useMemo(() => {
     if (!isClientRole) return demands;
     return demands.filter((d) => {
@@ -148,45 +210,43 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
     });
   }, [demands, isClientRole, currentUser.clientId, clientScopeName, clientObj]);
 
+  // Helper para verificar se a demanda está na coluna Aprovação Cliente
+  const isAprovacaoCliente = useCallback(
+    (demand: DemandItem): boolean => {
+      return isAprovacaoClienteColumn(demand.columnId, columns);
+    },
+    [columns]
+  );
+
+  // Regra Oficial Estrita: Mostrar SOMENTE as demandas que estiverem na coluna "Aprovação Cliente"
+  const approvalOnlyDemands = useMemo(() => {
+    return clientAllDemands.filter((d) => isAprovacaoCliente(d));
+  }, [clientAllDemands, isAprovacaoCliente]);
+
   const scopedDemands = useMemo(() => {
-    // Regra: Mostrar a demanda no portal do cliente, quando a demanda estiver na coluna Aprovação Cliente ou com alteração solicitada
-    return clientAllDemands.filter((d) => {
-      const isApproval = 
-        d.columnId === 'aprovacao' || 
-        d.columnId === 'aprovacao-cliente' || 
-        d.columnId === 'aprovacao_cliente' || 
-        (d.columnId && d.columnId.toLowerCase().includes('aprov'));
-
-      // Se o usuário selecionou o filtro 'aprovado', permite ver os itens já aprovados
-      if (selectedStatusFilter === 'aprovado') {
-        return d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas';
+    return approvalOnlyDemands.filter((d) => {
+      if (selectedStatusFilter === 'pendente') {
+        return d.approvalStatus !== 'aprovado' && d.approvalStatus !== 'reprovado' && d.approvalStatus !== 'alteracao_solicitada';
       }
-
+      if (selectedStatusFilter === 'aprovado') {
+        return d.approvalStatus === 'aprovado';
+      }
       if (selectedStatusFilter === 'alteracoes') {
         return d.approvalStatus === 'alteracao_solicitada' || Boolean(d.approvalFeedback);
       }
-
-      // Por padrão, incluir demandas na coluna de aprovação ou que tiveram ajustes pedidos pelo cliente
-      return isApproval || d.approvalStatus === 'alteracao_solicitada' || Boolean(d.approvalFeedback);
+      if (selectedStatusFilter === 'reprovado') {
+        return d.approvalStatus === 'reprovado';
+      }
+      // 'todos': todas as demandas que estiverem na coluna aprovação cliente
+      return true;
     });
-  }, [clientAllDemands, selectedStatusFilter]);
+  }, [approvalOnlyDemands, selectedStatusFilter]);
 
   // Filtered demands based on controls
   const filteredDemands = useMemo(() => {
     return scopedDemands.filter((d) => {
-      // Status filter
-      if (selectedStatusFilter === 'pendente') {
-        const isApprovalCol = d.columnId === 'aprovacao' || d.columnId === 'aprovacao-cliente' || d.columnId === 'aprovacao_cliente' || (d.columnId && d.columnId.toLowerCase().includes('aprov'));
-        const isPending = isApprovalCol && d.approvalStatus !== 'aprovado' && d.approvalStatus !== 'reprovado';
-        if (!isPending) return false;
-      } else if (selectedStatusFilter === 'aprovado') {
-        const isApproved = d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas';
-        if (!isApproved) return false;
-      } else if (selectedStatusFilter === 'alteracoes') {
-        if (d.approvalStatus !== 'alteracao_solicitada' && !d.approvalFeedback) return false;
-      } else if (selectedStatusFilter === 'reprovado') {
-        if (d.approvalStatus !== 'reprovado') return false;
-      }
+      // Garantia de que a demanda está na coluna aprovação cliente
+      if (!isAprovacaoCliente(d)) return false;
 
       // Type / Format filter
       if (selectedTypeFilter !== 'todos') {
@@ -211,18 +271,18 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
 
       return true;
     });
-  }, [scopedDemands, selectedStatusFilter, selectedTypeFilter, selectedClientFilter, searchQuery, isClientRole]);
+  }, [scopedDemands, selectedTypeFilter, selectedClientFilter, searchQuery, isClientRole, isAprovacaoCliente]);
 
-  // Counts
-  const totalCount = scopedDemands.length;
-  const pendingCount = clientAllDemands.filter(
-    (d) => (d.columnId === 'aprovacao' || (d.columnId && d.columnId.toLowerCase().includes('aprov'))) && (d.approvalStatus === 'pendente' || !d.approvalStatus || d.columnId === 'aprovacao')
+  // Counts calculados exclusivamente a partir de demandas na coluna Aprovação Cliente
+  const totalCount = approvalOnlyDemands.length;
+  const pendingCount = approvalOnlyDemands.filter(
+    (d) => d.approvalStatus !== 'aprovado' && d.approvalStatus !== 'reprovado' && d.approvalStatus !== 'alteracao_solicitada'
   ).length;
-  const approvedCount = clientAllDemands.filter(
-    (d) => d.approvalStatus === 'aprovado' || d.columnId === 'agendamento' || d.columnId === 'concluidas'
+  const approvedCount = approvalOnlyDemands.filter(
+    (d) => d.approvalStatus === 'aprovado'
   ).length;
-  const changesCount = clientAllDemands.filter(
-    (d) => d.approvalStatus === 'alteracao_solicitada'
+  const changesCount = approvalOnlyDemands.filter(
+    (d) => d.approvalStatus === 'alteracao_solicitada' || Boolean(d.approvalFeedback)
   ).length;
 
   const handleApprove = (demand: DemandItem, e?: React.MouseEvent) => {
@@ -237,8 +297,8 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
   };
 
   const handleBulkApprove = () => {
-    const pendings = scopedDemands.filter(
-      (d) => d.columnId === 'aprovacao' || d.approvalStatus === 'pendente' || (!d.approvalStatus && d.columnId === 'aprovacao')
+    const pendings = approvalOnlyDemands.filter(
+      (d) => d.approvalStatus !== 'aprovado' && d.approvalStatus !== 'reprovado'
     );
     pendings.forEach((d) => onClientApprovalAction(d.id, 'aprovado'));
     setIsBulkApprovalModalOpen(false);
@@ -960,14 +1020,14 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
           {[
             { id: 'pendente', title: 'Aguardando Aprovação', count: pendingCount, color: 'border-amber-400 dark:border-amber-700' },
             { id: 'alteracoes', title: 'Ajustes Solicitados', count: changesCount, color: 'border-rose-400 dark:border-rose-800' },
-            { id: 'agendamento', title: 'Agendamento (Aprovados)', count: scopedDemands.filter(d => d.columnId === 'agendamento' || (d.approvalStatus === 'aprovado' && d.columnId !== 'concluidas')).length, color: 'border-purple-400 dark:border-purple-800' },
-            { id: 'concluidas', title: 'Finalizados', count: scopedDemands.filter(d => d.columnId === 'concluidas').length, color: 'border-emerald-400 dark:border-emerald-800' },
+            { id: 'aprovado', title: 'Aprovados', count: approvedCount, color: 'border-emerald-400 dark:border-emerald-800' },
+            { id: 'reprovado', title: 'Reprovados', count: approvalOnlyDemands.filter(d => d.approvalStatus === 'reprovado').length, color: 'border-rose-400 dark:border-rose-800' },
           ].map((col) => {
-            const items = scopedDemands.filter((d) => {
-              if (col.id === 'pendente') return d.columnId === 'aprovacao' || d.approvalStatus === 'pendente' || (!d.approvalStatus && d.columnId === 'aprovacao');
-              if (col.id === 'alteracoes') return d.approvalStatus === 'alteracao_solicitada';
-              if (col.id === 'agendamento') return d.columnId === 'agendamento' || (d.approvalStatus === 'aprovado' && d.columnId !== 'concluidas');
-              if (col.id === 'concluidas') return d.columnId === 'concluidas';
+            const items = approvalOnlyDemands.filter((d) => {
+              if (col.id === 'pendente') return d.approvalStatus !== 'aprovado' && d.approvalStatus !== 'reprovado' && d.approvalStatus !== 'alteracao_solicitada';
+              if (col.id === 'alteracoes') return d.approvalStatus === 'alteracao_solicitada' || Boolean(d.approvalFeedback);
+              if (col.id === 'aprovado') return d.approvalStatus === 'aprovado';
+              if (col.id === 'reprovado') return d.approvalStatus === 'reprovado';
               return false;
             });
 
@@ -1317,7 +1377,7 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
             {clients.slice(0, 6).map((c) => {
-              const clientPending = scopedDemands.filter(d => (d.client || '').toLowerCase() === c.name.toLowerCase() && (d.columnId === 'aprovacao' || d.approvalStatus === 'pendente')).length;
+              const clientPending = approvalOnlyDemands.filter(d => (d.client || '').toLowerCase() === c.name.toLowerCase() && d.approvalStatus !== 'aprovado' && d.approvalStatus !== 'reprovado').length;
               const phoneClean = (c.phone || '11999999999').replace(/[^0-9]/g, '');
               const waUrl = `https://wa.me/55${phoneClean}?text=${encodeURIComponent(`Olá ${c.name}! Tudo bem? Temos ${clientPending} materiais no seu Portal de Aprovação da Agência Help para você conferir.`)}`;
 
@@ -1799,10 +1859,46 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (!newPostTitle.trim()) return;
+
+                const uniqueNum = `${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
+                const resolvedClient = clientObj ? (clientObj.name || clientObj.companyName) : (newPostClient || currentUser.clientName || currentUser.name || 'Cliente');
+                
+                const newDemand: DemandItem = {
+                  id: `DEM-${uniqueNum}`,
+                  title: newPostTitle.trim(),
+                  client: resolvedClient,
+                  clientId: clientObj?.id,
+                  clientProject: resolvedClient,
+                  description: newPostDescription.trim() || undefined,
+                  type: newPostType || 'Post',
+                  serviceCategory: 'Social Media',
+                  columnId: 'aprovacao',
+                  priority: 'media',
+                  priorityBars: 2,
+                  dueDate: newPostDate || 'Sem prazo',
+                  assignee: {
+                    name: 'Marcos Lancerotti',
+                    avatar: '',
+                  },
+                  statusLabel: 'Aguardando Aprovação',
+                  approvalStatus: 'pendente',
+                  whatsappNotified: false,
+                  checklistTotal: 4,
+                  checklistCompleted: 0,
+                  commentsCount: 0,
+                  attachmentsCount: 0,
+                  attachments: [],
+                };
+
+                if (onAddDemand) {
+                  onAddDemand(newDemand);
+                }
+
                 setIsNewPostModalOpen(false);
                 setActionSuccessNotice({
                   id: 'new-post',
-                  message: `Demanda de post "${newPostTitle || 'Novo Post'}" cadastrada com sucesso!`,
+                  message: `Demanda de post "${newPostTitle.trim()}" cadastrada com sucesso e salva no Kanban!`,
                   type: 'success',
                 });
                 setNewPostTitle('');
@@ -1847,7 +1943,8 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
                   </label>
                   <input
                     type="date"
-                    defaultValue="2026-08-28"
+                    value={newPostDate}
+                    onChange={(e) => setNewPostDate(e.target.value)}
                     className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white"
                   />
                 </div>

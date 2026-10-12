@@ -562,7 +562,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           approvalStatus: 'pendente',
           dueDate: '12/10 às 18:00',
           clientProject: 'Concurso Manto da Massa',
-        } as DemandItem,
+        } as unknown as DemandItem,
       },
       {
         id: 'demo-post-1',
@@ -581,7 +581,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           approvalStatus: 'pendente',
           dueDate: '14/10',
           clientProject: 'Campanha Institucional',
-        } as DemandItem,
+        } as unknown as DemandItem,
       },
       {
         id: 'demo-post-2',
@@ -600,7 +600,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           approvalStatus: 'pendente',
           dueDate: '16/10',
           clientProject: 'Branding & Posicionamento',
-        } as DemandItem,
+        } as unknown as DemandItem,
       },
     ];
 
@@ -628,7 +628,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
       dueDate: currentShowcaseItem.date,
       status: 'aprovacao',
       approvalStatus: 'pendente',
-    } as DemandItem;
+    } as unknown as DemandItem;
   }, [currentShowcaseItem, activeClient.name]);
 
   const isShowcaseApproved = Boolean(

@@ -213,31 +213,12 @@ export const ColaboradorModal: React.FC<ColaboradorModalProps> = ({
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.88);
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
           setAvatar(compressed);
           setCustomAvatarUrl(compressed);
-
-          // Salva imediatamente no servidor para obter URL estática permanente acessível por todos os computadores e celulares
-          serverDbService.uploadAvatar(compressed, memberToEdit?.id, file.name)
-            .then((serverUrl) => {
-              if (serverUrl) {
-                setAvatar(serverUrl);
-                setCustomAvatarUrl(serverUrl);
-              }
-            })
-            .catch(() => {});
         } else {
           setAvatar(result);
           setCustomAvatarUrl(result);
-
-          serverDbService.uploadAvatar(result, memberToEdit?.id, file.name)
-            .then((serverUrl) => {
-              if (serverUrl) {
-                setAvatar(serverUrl);
-                setCustomAvatarUrl(serverUrl);
-              }
-            })
-            .catch(() => {});
         }
       };
       img.src = result;

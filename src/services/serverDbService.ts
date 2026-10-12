@@ -14,6 +14,7 @@ export interface AppDatabasePayload {
   securityConfig?: any;
   newMemberDefaultPermissions?: any;
   collaboratorRules?: any;
+  deletedDemandIds?: string[];
   updatedAt?: number;
 }
 
@@ -531,6 +532,20 @@ export const serverDbService = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ demands }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Endpoint de canal direto para excluir definitivamente uma demanda no servidor central e Firestore
+   */
+  async deleteDemandDirectly(demandId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/demands/${encodeURIComponent(demandId)}`, {
+        method: 'DELETE',
       });
       return res.ok;
     } catch {

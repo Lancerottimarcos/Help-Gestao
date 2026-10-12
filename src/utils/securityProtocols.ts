@@ -1090,7 +1090,9 @@ export async function validateMasterCredentials(
         email: marcosMember?.email || 'lancerottirmarcos@gmail.com',
         role: 'proprietario',
         roleLabel: 'Proprietário da Agência',
-        avatarUrl: marcosMember?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        avatarUrl: (marcosMember?.avatar && !marcosMember.avatar.startsWith('/uploads/'))
+          ? marcosMember.avatar
+          : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
         isMaster: true,
         permissions: {
           clientes: true,

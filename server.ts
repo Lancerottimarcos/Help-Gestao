@@ -89,16 +89,89 @@ async function fetchFirestoreDocumentRest(collectionName = "agency_data", docId 
   return null;
 }
 
-// Sincronização inteligente com debounce e tolerância a limites de cota diária
+// Sincronização inteligente com debounce e sincronização imediata para operações críticas
 let firestoreSyncTimeout: NodeJS.Timeout | null = null;
 let pendingFirestoreUpdates: Record<string, any> = {};
 let firestoreQuotaCooldownUntil = 0;
+
+async function syncToFirestoreImmediately(payload: Record<string, any>): Promise<boolean> {
+  if (!fbConfig || !fbConfig.projectId || !fbConfig.apiKey) return false;
+  if (Date.now() < firestoreQuotaCooldownUntil) return false;
+
+  try {
+    const dbId = fbConfig.firestoreDatabaseId || "(default)";
+    const fields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (v !== undefined) fields[k] = toFirestoreRestValue(v);
+    }
+    fields.updatedAt = toFirestoreRestValue(Date.now());
+
+    const fieldKeys = Object.keys(fields);
+    const updateMaskParams = fieldKeys
+      .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
+      .join("&");
+    const url = `https://firestore.googleapis.com/v1/projects/${fbConfig.projectId}/databases/${dbId}/documents/agency_data/main_state?key=${fbConfig.apiKey}&${updateMaskParams}`;
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields }),
+    });
+
+    if (res.ok) {
+      console.log(`[Firestore REST] ✅ Sincronização imediata concluída: ${fieldKeys.join(", ")}`);
+      return true;
+    } else {
+      const errorJson: any = await res.json().catch(() => null);
+      const errMsg = JSON.stringify(errorJson || {});
+      console.warn(`[Firestore REST] ⚠️ Falha ao salvar imediatamente (${res.status}):`, errMsg);
+      if (
+        res.status === 429 ||
+        errMsg.includes("RESOURCE_EXHAUSTED") ||
+        errMsg.includes("Quota limit exceeded") ||
+        errMsg.includes("Quota")
+      ) {
+        firestoreQuotaCooldownUntil = Date.now() + 60 * 60 * 1000;
+      }
+      return false;
+    }
+  } catch (err: any) {
+    console.error("[Firestore REST] Erro de rede ao sincronizar imediatamente:", err);
+    return false;
+  }
+}
+
+function sanitizeDemandsForFirestore(demands: any[]): any[] {
+  if (!Array.isArray(demands)) return [];
+  return demands.map((d: any) => {
+    if (!d || typeof d !== "object") return d;
+    const cleanDemand = { ...d };
+    if (typeof cleanDemand.thumbnail === "string" && cleanDemand.thumbnail.startsWith("data:image/") && cleanDemand.thumbnail.length > 50000) {
+      const savedUrl = saveBase64Image(cleanDemand.thumbnail, `thumb-${cleanDemand.id || Date.now()}`);
+      if (savedUrl) cleanDemand.thumbnail = savedUrl;
+    }
+    if (Array.isArray(cleanDemand.attachments)) {
+      cleanDemand.attachments = cleanDemand.attachments.map((att: any) => {
+        if (att && typeof att.url === "string" && att.url.startsWith("data:image/") && att.url.length > 50000) {
+          const savedUrl = saveBase64Image(att.url, `att-${att.id || Date.now()}`);
+          return { ...att, url: savedUrl || att.url };
+        }
+        return att;
+      });
+    }
+    return cleanDemand;
+  });
+}
 
 function scheduleSyncToFirestore(payload: Record<string, any>) {
   if (!fbConfig || !fbConfig.projectId || !fbConfig.apiKey) return;
   if (Date.now() < firestoreQuotaCooldownUntil) return;
 
-  pendingFirestoreUpdates = { ...pendingFirestoreUpdates, ...payload };
+  const sanitized = { ...payload };
+  if (Array.isArray(sanitized.demands)) {
+    sanitized.demands = sanitizeDemandsForFirestore(sanitized.demands);
+  }
+
+  pendingFirestoreUpdates = { ...pendingFirestoreUpdates, ...sanitized };
 
   if (firestoreSyncTimeout) {
     clearTimeout(firestoreSyncTimeout);
@@ -110,39 +183,9 @@ function scheduleSyncToFirestore(payload: Record<string, any>) {
     pendingFirestoreUpdates = {};
 
     try {
-      const dbId = fbConfig.firestoreDatabaseId || "(default)";
-      const fields: Record<string, any> = {};
-      for (const [k, v] of Object.entries(updatesToSend)) {
-        if (v !== undefined) fields[k] = toFirestoreRestValue(v);
-      }
-      fields.updatedAt = toFirestoreRestValue(Date.now());
-
-      const fieldKeys = Object.keys(fields);
-      const updateMaskParams = fieldKeys
-        .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
-        .join("&");
-      const url = `https://firestore.googleapis.com/v1/projects/${fbConfig.projectId}/databases/${dbId}/documents/agency_data/main_state?key=${fbConfig.apiKey}&${updateMaskParams}`;
-      const res = await fetch(url, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields }),
-      });
-
-      if (!res.ok) {
-        const errorJson: any = await res.json().catch(() => null);
-        const errMsg = JSON.stringify(errorJson || {});
-        if (
-          res.status === 429 ||
-          errMsg.includes("RESOURCE_EXHAUSTED") ||
-          errMsg.includes("Quota limit exceeded") ||
-          errMsg.includes("Quota")
-        ) {
-          firestoreQuotaCooldownUntil = Date.now() + 60 * 60 * 1000;
-          console.log("[Firestore REST] Cota diária gratuita atingida. Modo de persistência em disco ativo com total resiliência.");
-        }
-      }
+      await syncToFirestoreImmediately(updatesToSend);
     } catch {}
-  }, 2000);
+  }, 1000);
 }
 
 // Garante que o diretório de dados exista
@@ -198,9 +241,36 @@ function isCustomAvatar(avatar?: string): boolean {
   if (!avatar || typeof avatar !== "string") return false;
   const trimmed = avatar.trim();
   if (!trimmed) return false;
-  if (trimmed.startsWith("data:image/") || trimmed.startsWith("/uploads/")) return true;
+  if (trimmed.startsWith("data:image/")) return true;
+  if (trimmed.startsWith("/uploads/")) {
+    const filename = path.basename(trimmed);
+    for (const dir of [UPLOADS_DIR, FALLBACK_UPLOADS_DIR, DIST_UPLOADS_DIR]) {
+      if (fs.existsSync(path.join(dir, filename))) return true;
+    }
+    return false;
+  }
   if (trimmed.includes("photo-1534528741775")) return false; // Stock placeholder
   return true;
+}
+
+function sanitizeTeamMembersList(members: any[]): any[] {
+  if (!Array.isArray(members)) return [];
+  return members.map((m) => {
+    if (!m) return m;
+    if (typeof m.avatar === "string" && m.avatar.startsWith("/uploads/")) {
+      const filename = path.basename(m.avatar);
+      const exists = [UPLOADS_DIR, FALLBACK_UPLOADS_DIR, DIST_UPLOADS_DIR].some((dir) =>
+        fs.existsSync(path.join(dir, filename))
+      );
+      if (!exists) {
+        return {
+          ...m,
+          avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256",
+        };
+      }
+    }
+    return m;
+  });
 }
 
 function isOwnerOrMarcos(member?: any): boolean {
@@ -415,13 +485,35 @@ async function startServer() {
       "activities",
       "teamMembers",
       "kanbanColumns",
+      "deletedDemandIds",
     ];
 
+    const deletedDemandIds = new Set([
+      ...(Array.isArray(local.deletedDemandIds) ? local.deletedDemandIds : []),
+      ...(Array.isArray(remote.deletedDemandIds) ? remote.deletedDemandIds : []),
+    ]);
+    merged.deletedDemandIds = Array.from(deletedDemandIds);
+
     for (const col of collections) {
+      if (col === "deletedDemandIds") continue;
       const localList = Array.isArray(local[col]) ? local[col] : [];
       const remoteList = Array.isArray(remote[col]) ? remote[col] : [];
 
-      if (col === "teamMembers") {
+      if (col === "demands") {
+        const cleanLocal = localList.filter((d: any) => d && d.id && !deletedDemandIds.has(d.id));
+        const cleanRemote = remoteList.filter((d: any) => d && d.id && !deletedDemandIds.has(d.id));
+        const localMap = new Map(cleanLocal.map((item: any) => [item.id, item]));
+        const remoteMap = new Map(cleanRemote.map((item: any) => [item.id, item]));
+
+        // Mescla demandas: preserva todas as propriedades locais e remotas
+        const mergedDemands = cleanRemote.map((rd: any) => {
+          const ld = localMap.get(rd.id);
+          if (!ld) return rd;
+          return { ...rd, ...ld };
+        });
+        const localOnly = cleanLocal.filter((item: any) => !remoteMap.has(item.id));
+        merged[col] = [...localOnly, ...mergedDemands];
+      } else if (col === "teamMembers") {
         if (remoteList.length > 0 && localList.length === 0) {
           merged[col] = remoteList;
         } else if (localList.length > 0 && remoteList.length === 0) {
@@ -489,32 +581,26 @@ async function startServer() {
       }
     }
 
-    // Se a base local não tiver clientes, demandas OU equipe, tenta hidratar do Firestore
-    const hasLocalClients = Array.isArray(inMemoryDatabaseState?.clients) && inMemoryDatabaseState.clients.length > 0;
-    const hasLocalDemands = Array.isArray(inMemoryDatabaseState?.demands) && inMemoryDatabaseState.demands.length > 0;
-    const hasLocalTeam = Array.isArray(inMemoryDatabaseState?.teamMembers) && inMemoryDatabaseState.teamMembers.length > 0;
-
-    if (!hasLocalClients || !hasLocalDemands || !hasLocalTeam) {
-      try {
-        console.log("[Database Server] Verificando sincronização com Firestore REST (agency_data/main_state)...");
-        const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
-        if (remote) {
-          console.log(
-            "[Database Server] Sucesso! Sincronizado do Firestore. Clientes:",
-            remote.clients?.length,
-            "Demandas:",
-            remote.demands?.length,
-            "Serviços:",
-            remote.services?.length,
-            "Equipe:",
-            remote.teamMembers?.length
-          );
-          inMemoryDatabaseState = mergeDatabaseStates(inMemoryDatabaseState || {}, remote);
-          persistDatabaseState(inMemoryDatabaseState);
-        }
-      } catch (err) {
-        console.warn("[Database Server] Aviso ao sincronizar do Firestore no startup:", err);
+    // Sincroniza e hidrata do Google Cloud Firestore sempre no startup para persistência garantida em Cloud Run
+    try {
+      console.log("[Database Server] Sincronizando com Firestore REST (agency_data/main_state) no startup...");
+      const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
+      if (remote) {
+        console.log(
+          "[Database Server] Sucesso! Sincronizado do Firestore no startup. Clientes:",
+          remote.clients?.length,
+          "Demandas:",
+          remote.demands?.length,
+          "Serviços:",
+          remote.services?.length,
+          "Equipe:",
+          remote.teamMembers?.length
+        );
+        inMemoryDatabaseState = mergeDatabaseStates(inMemoryDatabaseState || {}, remote);
+        persistDatabaseState(inMemoryDatabaseState);
       }
+    } catch (err) {
+      console.warn("[Database Server] Aviso ao sincronizar do Firestore no startup:", err);
     }
 
     // Garante que a equipe nunca fique vazia (inicializa com o Dono Marcos Lancerotti)
@@ -547,6 +633,9 @@ async function startServer() {
         }
       } catch {}
     }
+    if (Array.isArray(data.teamMembers)) {
+      data = { ...data, teamMembers: sanitizeTeamMembersList(data.teamMembers) };
+    }
     return res.json({
       success: true,
       data,
@@ -571,6 +660,7 @@ async function startServer() {
         "activities",
         "teamMembers",
         "kanbanColumns",
+        "deletedDemandIds",
         "updatedAt",
         "masterPasswordHash",
         "securityConfig",
@@ -599,27 +689,49 @@ async function startServer() {
         }
       }
 
-      // Converte fotos em base64 da equipe para arquivos leves em disco
+      // Se body contiver deletedDemandIds, mescla no estado
+      if (Array.isArray(body.deletedDemandIds)) {
+        const existingDeleted = new Set(Array.isArray(currentData.deletedDemandIds) ? currentData.deletedDemandIds : []);
+        body.deletedDemandIds.forEach((id: string) => existingDeleted.add(id));
+        sanitizedUpdate.deletedDemandIds = Array.from(existingDeleted);
+      }
+
+      // Preserva e mescla demandas para evitar desaparecimento por sincronização desatualizada
+      if (Array.isArray(sanitizedUpdate.demands)) {
+        const deletedIds = new Set([
+          ...(Array.isArray(currentData.deletedDemandIds) ? currentData.deletedDemandIds : []),
+          ...(Array.isArray(sanitizedUpdate.deletedDemandIds) ? sanitizedUpdate.deletedDemandIds : []),
+        ]);
+
+        const currentDemands = (Array.isArray(currentData.demands) ? currentData.demands : [])
+          .filter((d: any) => d && d.id && !deletedIds.has(d.id));
+        const incomingDemands = sanitizedUpdate.demands
+          .filter((d: any) => d && d.id && !deletedIds.has(d.id));
+
+        const incomingMap = new Map(incomingDemands.map((d: any) => [d.id, d]));
+        const updatedCurrent = currentDemands.map((d: any) => incomingMap.get(d.id) || d);
+        const currentIds = new Set(currentDemands.map((d: any) => d.id));
+        const brandNew = incomingDemands.filter((d: any) => !currentIds.has(d.id));
+
+        sanitizedUpdate.demands = [...brandNew, ...updatedCurrent];
+      }
+
+      // Preserva fotos em base64 da equipe permanentemente (sem substituir por URLs locais efêmeras)
       if (Array.isArray(sanitizedUpdate.teamMembers)) {
         sanitizedUpdate.teamMembers = sanitizedUpdate.teamMembers.map((m: any) => {
           if (m && typeof m.avatar === "string" && m.avatar.startsWith("data:image/")) {
-            const savedUrl = saveBase64Image(m.avatar, `member-${m.id || "avatar"}`);
-            if (savedUrl) {
-              return { ...m, avatar: savedUrl };
-            }
+            saveBase64Image(m.avatar, `member-${m.id || "avatar"}`);
+            // Mantém m.avatar intacto (data:image/...) para garantir persistência total em qualquer computador ou celular
           }
           return m;
         });
       }
 
-      // Converte fotos em base64 de clientes para arquivos leves em disco
+      // Preserva fotos em base64 de clientes permanentemente
       if (Array.isArray(sanitizedUpdate.clients)) {
         sanitizedUpdate.clients = sanitizedUpdate.clients.map((c: any) => {
           if (c && typeof c.avatar === "string" && c.avatar.startsWith("data:image/")) {
-            const savedUrl = saveBase64Image(c.avatar, `client-${c.id || "avatar"}`);
-            if (savedUrl) {
-              return { ...c, avatar: savedUrl };
-            }
+            saveBase64Image(c.avatar, `client-${c.id || "avatar"}`);
           }
           return c;
         });
@@ -678,14 +790,14 @@ async function startServer() {
   // Endpoints dedicados para Equipe (Team Members)
   app.get("/api/team-members", async (_req, res) => {
     let db = getDatabaseState();
-    let teamMembers = Array.isArray(db.teamMembers) ? db.teamMembers : [];
+    let teamMembers = Array.isArray(db.teamMembers) ? sanitizeTeamMembersList(db.teamMembers) : [];
     if (teamMembers.length === 0) {
       try {
         const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
         if (remote && Array.isArray(remote.teamMembers) && remote.teamMembers.length > 0) {
           db = mergeDatabaseStates(db, remote);
           persistDatabaseState(db);
-          teamMembers = db.teamMembers;
+          teamMembers = sanitizeTeamMembersList(db.teamMembers);
         }
       } catch {}
     }
@@ -717,11 +829,11 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "Colaborador ou lista inválida." });
       }
 
-      // Converte fotos em base64 para arquivos locais leves
+      // Preserva fotos em base64 com persistência permanente para qualquer dispositivo
       const processed = incoming.map((m: any) => {
         if (m && typeof m.avatar === "string" && m.avatar.startsWith("data:image/")) {
-          const url = saveBase64Image(m.avatar, `member-${m.id || "avatar"}`);
-          if (url) return { ...m, avatar: url };
+          saveBase64Image(m.avatar, `member-${m.id || "avatar"}`);
+          // Mantém m.avatar intacto (data:image/...) para nunca quebrar ou retornar 404 em outros dispositivos
         }
         return m;
       });
@@ -777,13 +889,25 @@ async function startServer() {
 
   app.post("/api/demands", async (req, res) => {
     try {
-      const { demand, demands } = req.body || {};
+      const { demand, demands, deletedDemandIds } = req.body || {};
       const current = getDatabaseState();
       let currentDemands: any[] = Array.isArray(current.demands) ? [...current.demands] : [];
+      const currentDeletedIds = new Set(Array.isArray(current.deletedDemandIds) ? current.deletedDemandIds : []);
+      if (Array.isArray(deletedDemandIds)) {
+        deletedDemandIds.forEach((id: string) => currentDeletedIds.add(id));
+      }
 
       if (Array.isArray(demands)) {
-        currentDemands = demands;
+        const cleanIncoming = demands.filter((d: any) => d && d.id && !currentDeletedIds.has(d.id));
+        const incomingMap = new Map(cleanIncoming.map((d: any) => [d.id, d]));
+        const updated = currentDemands
+          .filter((d: any) => d && d.id && !currentDeletedIds.has(d.id))
+          .map((d: any) => incomingMap.get(d.id) || d);
+        const currentIds = new Set(currentDemands.map((d: any) => d.id));
+        const newDemands = cleanIncoming.filter((d: any) => !currentIds.has(d.id));
+        currentDemands = [...newDemands, ...updated];
       } else if (demand && demand.id) {
+        currentDeletedIds.delete(demand.id);
         const idx = currentDemands.findIndex((d: any) => d.id === demand.id);
         if (idx >= 0) {
           currentDemands[idx] = demand;
@@ -797,20 +921,51 @@ async function startServer() {
       const updated = {
         ...current,
         demands: currentDemands,
+        deletedDemandIds: Array.from(currentDeletedIds),
         updatedAt: Date.now(),
       };
       persistDatabaseState(updated);
-      scheduleSyncToFirestore({ demands: currentDemands });
+      scheduleSyncToFirestore({ demands: currentDemands, deletedDemandIds: Array.from(currentDeletedIds) });
 
       // Notifica todos os dispositivos em tempo real
       try {
         broadcast({ type: "demands:update", demands: currentDemands });
+        broadcast({ type: "database:update", data: updated, demands: currentDemands });
       } catch {}
 
       res.json({ success: true, count: currentDemands.length });
     } catch (e: any) {
       console.error("Erro ao salvar demanda(s):", e);
       res.status(500).json({ success: false, error: "Falha ao gravar demanda." });
+    }
+  });
+
+  app.delete("/api/demands/:id", async (req, res) => {
+    try {
+      const demandId = req.params.id;
+      const current = getDatabaseState();
+      const currentDemands: any[] = Array.isArray(current.demands) ? current.demands : [];
+      const updatedDemands = currentDemands.filter((d: any) => d.id !== demandId);
+      const deletedIds = Array.isArray(current.deletedDemandIds) ? [...current.deletedDemandIds] : [];
+      if (!deletedIds.includes(demandId)) deletedIds.push(demandId);
+
+      const updated = {
+        ...current,
+        demands: updatedDemands,
+        deletedDemandIds: deletedIds,
+        updatedAt: Date.now(),
+      };
+      persistDatabaseState(updated);
+      scheduleSyncToFirestore({ demands: updatedDemands, deletedDemandIds: deletedIds });
+
+      try {
+        broadcast({ type: "demands:update", demands: updatedDemands });
+        broadcast({ type: "database:update", data: updated, demands: updatedDemands });
+      } catch {}
+
+      res.json({ success: true, count: updatedDemands.length });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: "Falha ao excluir demanda." });
     }
   });
 

@@ -317,7 +317,8 @@ export function Layout({ children, onLogout }: LayoutProps) {
     if (!avatar || typeof avatar !== 'string') return false;
     const trimmed = avatar.trim();
     if (!trimmed) return false;
-    if (trimmed.startsWith('data:image/') || trimmed.startsWith('/uploads/')) return true;
+    if (trimmed.startsWith('data:image/')) return true;
+    if (trimmed.startsWith('/uploads/')) return false; // Links efêmeros /uploads/ não persistem entre dispositivos
     if (trimmed.includes('photo-1534528741775')) return false; // Stock placeholder
     return true;
   };
@@ -746,6 +747,12 @@ export function Layout({ children, onLogout }: LayoutProps) {
                 merged.push(loc);
               }
             });
+
+            // Auto-cura: se houver demandas criadas localmente que o servidor ainda não tem, persiste imediatamente
+            if (localPending.length > 0) {
+              serverDbService.saveDatabase({ demands: merged }, true);
+              serverDbService.saveDemandsDirectly(merged);
+            }
 
             if (
               cleanPrev.length === merged.length &&
@@ -2077,8 +2084,9 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ demands: updated }, true);
+      serverDbService.saveDatabase({ demands: updated, deletedDemandIds: [demandId] }, true);
       serverDbService.saveDemandsDirectly(updated);
+      serverDbService.deleteDemandDirectly(demandId);
       return updated;
     });
 
@@ -2712,6 +2720,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           <ClientApprovalsView
             demands={demands}
             clients={clients}
+            columns={kanbanColumns}
             currentUser={effectiveUser}
             onClientApprovalAction={handleClientApprovalAction}
             onOpenClientApprovalPortal={(demand) => setClientPortalDemand(demand)}
@@ -2727,6 +2736,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
               setKanbanFilterTrigger((prev) => prev + 1);
               setCurrentPage('demandas');
             }}
+            onAddDemand={handleAddDemand}
           />
         );
       case 'portal-cliente':
