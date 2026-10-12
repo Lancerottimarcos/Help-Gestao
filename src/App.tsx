@@ -79,13 +79,50 @@ export function Layout({ children, onLogout }: LayoutProps) {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Clean Launch Reset Handler: garante que clientes, demandas e serviços antigos sejam removidos para o lançamento
+  useEffect(() => {
+    try {
+      const CLEAN_KEY = 'agency_clean_launch_v2026_production_clean';
+      if (typeof window !== 'undefined' && localStorage.getItem(CLEAN_KEY) !== 'true') {
+        localStorage.removeItem('agency_demands');
+        localStorage.removeItem('agency_clients');
+        localStorage.removeItem('agency_services');
+        localStorage.removeItem('agency_proposals');
+        localStorage.removeItem('agency_invoices');
+        localStorage.removeItem('agency_recent_activities');
+        localStorage.removeItem('agency_deleted_demand_ids');
+        localStorage.removeItem('agency_deleted_client_ids');
+        localStorage.removeItem('agency_deleted_service_ids');
+        localStorage.removeItem('agency_demands_v2');
+        localStorage.setItem('agency_demands', JSON.stringify([]));
+        localStorage.setItem('agency_clients', JSON.stringify([]));
+        localStorage.setItem('agency_services', JSON.stringify([]));
+        localStorage.setItem('agency_proposals', JSON.stringify([]));
+        localStorage.setItem('agency_invoices', JSON.stringify([]));
+        localStorage.setItem('agency_recent_activities', JSON.stringify([]));
+        localStorage.setItem(CLEAN_KEY, 'true');
+        setDemands([]);
+        setClients([]);
+        setServices([]);
+        setProposals([]);
+        setInvoices([]);
+        setActivities([]);
+      }
+    } catch {}
+  }, []);
+
   // Main state data with local persistence for production readiness
   const [demands, setDemands] = useState<DemandItem[]>(() => {
     try {
-      const saved = localStorage.getItem('agency_demands');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (typeof window !== 'undefined') {
+        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+          return [];
+        }
+        const saved = localStorage.getItem('agency_demands');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
       }
     } catch {}
     return initialDemands;
@@ -93,11 +130,16 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const [clients, setClients] = useState<Client[]>(() => {
     try {
-      const saved = localStorage.getItem('agency_clients');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+      if (typeof window !== 'undefined') {
+        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+          return [];
+        }
+        const saved = localStorage.getItem('agency_clients');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
         }
       }
     } catch {}
@@ -106,10 +148,15 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const [services, setServices] = useState<Service[]>(() => {
     try {
-      const saved = localStorage.getItem('agency_services');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+      if (typeof window !== 'undefined') {
+        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+          return [];
+        }
+        const saved = localStorage.getItem('agency_services');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        }
       }
     } catch {}
     return initialServices;
@@ -117,10 +164,15 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const [proposals, setProposals] = useState<BudgetProposal[]>(() => {
     try {
-      const saved = localStorage.getItem('agency_proposals');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+      if (typeof window !== 'undefined') {
+        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+          return [];
+        }
+        const saved = localStorage.getItem('agency_proposals');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        }
       }
     } catch {}
     return initialProposals;
@@ -128,11 +180,16 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
     try {
-      const saved = localStorage.getItem('agency_invoices');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.map(normalizeInvoice);
+      if (typeof window !== 'undefined') {
+        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+          return [];
+        }
+        const saved = localStorage.getItem('agency_invoices');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            return parsed.map(normalizeInvoice);
+          }
         }
       }
     } catch {}
@@ -664,27 +721,37 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
         // Sincronização segura de CLIENTES (sem sobrescrita destrutiva)
         if (remoteData.clients && Array.isArray(remoteData.clients)) {
-          const deletedClientIds = getDeletedClientIds();
-          const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
+          if (remoteData.clients.length === 0) {
+            setClients((prev) => {
+              if (prev.length === 0) return prev;
+              try {
+                localStorage.setItem('agency_clients', JSON.stringify([]));
+              } catch {}
+              return [];
+            });
+          } else {
+            const deletedClientIds = getDeletedClientIds();
+            const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
 
-          setClients((prev) => {
-            const cleanPrev = prev.filter((c) => !deletedClientIds.has(c.id));
-            const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
-            const localPending = cleanPrev.filter((c) => !remoteMap.has(c.id));
-            const merged = [...cleanRemote, ...localPending];
+            setClients((prev) => {
+              const cleanPrev = prev.filter((c) => !deletedClientIds.has(c.id));
+              const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
+              const localPending = cleanPrev.filter((c) => !remoteMap.has(c.id));
+              const merged = [...cleanRemote, ...localPending];
 
-            if (
-              cleanPrev.length === merged.length &&
-              cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.name === merged[idx]?.name && p.monthlyFee === merged[idx]?.monthlyFee)
-            ) {
-              return prev;
-            }
+              if (
+                cleanPrev.length === merged.length &&
+                cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.name === merged[idx]?.name && p.monthlyFee === merged[idx]?.monthlyFee)
+              ) {
+                return prev;
+              }
 
-            try {
-              localStorage.setItem('agency_clients', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
+              try {
+                localStorage.setItem('agency_clients', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
         }
 
         // Sincronização segura de DEMANDAS (sem sobrescrita destrutiva)
@@ -698,98 +765,119 @@ export function Layout({ children, onLogout }: LayoutProps) {
           } catch {}
         }
 
-        if (remoteDemandsList.length > 0) {
-          const deletedDemandIds = getDeletedDemandIds();
-          const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
+        if (remoteData.demands && Array.isArray(remoteData.demands)) {
+          if (remoteDemandsList.length === 0) {
+            setDemands((prev) => {
+              const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 30000);
+              if (isRecentlyEditedLocally && prev.length > 0) return prev;
+              try {
+                localStorage.setItem('agency_demands', JSON.stringify([]));
+              } catch {}
+              return [];
+            });
+          } else {
+            const deletedDemandIds = getDeletedDemandIds();
+            const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
 
-          setDemands((prev) => {
-            const cleanPrev = prev.filter((d) => !deletedDemandIds.has(d.id));
-            const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
-            const localPending = cleanPrev.filter((d) => !remoteMap.has(d.id));
+            setDemands((prev) => {
+              const cleanPrev = prev.filter((d) => !deletedDemandIds.has(d.id));
+              const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
+              const localPending = cleanPrev.filter((d) => !remoteMap.has(d.id));
 
-            // Preserva alterações locais recentes feitas há menos de 30 segundos
-            const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 30000);
-            if (isRecentlyEditedLocally) {
-              return prev;
-            }
-
-            const merged = cleanRemote.map((rem) => {
-              const loc = cleanPrev.find((p) => p.id === rem.id);
-              if (!loc) return rem;
-
-              // Se o servidor tem atualização de decisão/ajuste do cliente, prioriza os dados do servidor
-              const hasRemoteClientAction =
-                rem.approvalStatus === 'alteracao_solicitada' ||
-                Boolean(rem.approvalFeedback) ||
-                rem.approvalStatus === 'aprovado' ||
-                rem.approvalStatus === 'reprovado';
-
-              if (hasRemoteClientAction) {
-                return {
-                  ...loc,
-                  ...rem,
-                  columnId: rem.columnId || loc.columnId,
-                  approvalStatus: rem.approvalStatus,
-                  approvalFeedback: rem.approvalFeedback,
-                  lastApprovalFeedback: rem.lastApprovalFeedback || loc.lastApprovalFeedback,
-                  approvalAnsweredAt: rem.approvalAnsweredAt || loc.approvalAnsweredAt,
-                  statusLabel: rem.statusLabel || loc.statusLabel,
-                  history: (rem.history && rem.history.length >= (loc.history?.length || 0)) ? rem.history : loc.history,
-                };
+              // Preserva alterações locais recentes feitas há menos de 30 segundos
+              const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 30000);
+              if (isRecentlyEditedLocally) {
+                return prev;
               }
 
-              return { ...loc, ...rem };
-            });
+              const merged = cleanRemote.map((rem) => {
+                const loc = cleanPrev.find((p) => p.id === rem.id);
+                if (!loc) return rem;
 
-            // Adiciona as demandas cadastradas localmente pendentes de sincronização
-            localPending.forEach((loc) => {
-              if (!merged.some((m) => m.id === loc.id)) {
-                merged.push(loc);
+                // Se o servidor tem atualização de decisão/ajuste do cliente, prioriza os dados do servidor
+                const hasRemoteClientAction =
+                  rem.approvalStatus === 'alteracao_solicitada' ||
+                  Boolean(rem.approvalFeedback) ||
+                  rem.approvalStatus === 'aprovado' ||
+                  rem.approvalStatus === 'reprovado';
+
+                if (hasRemoteClientAction) {
+                  return {
+                    ...loc,
+                    ...rem,
+                    columnId: rem.columnId || loc.columnId,
+                    approvalStatus: rem.approvalStatus,
+                    approvalFeedback: rem.approvalFeedback,
+                    lastApprovalFeedback: rem.lastApprovalFeedback || loc.lastApprovalFeedback,
+                    approvalAnsweredAt: rem.approvalAnsweredAt || loc.approvalAnsweredAt,
+                    statusLabel: rem.statusLabel || loc.statusLabel,
+                    history: (rem.history && rem.history.length >= (loc.history?.length || 0)) ? rem.history : loc.history,
+                  };
+                }
+
+                return { ...loc, ...rem };
+              });
+
+              // Adiciona as demandas cadastradas localmente pendentes de sincronização
+              localPending.forEach((loc) => {
+                if (!merged.some((m) => m.id === loc.id)) {
+                  merged.push(loc);
+                }
+              });
+
+              // Auto-cura: se houver demandas criadas localmente que o servidor ainda não tem, persiste imediatamente
+              if (localPending.length > 0) {
+                serverDbService.saveDatabase({ demands: merged }, true);
+                serverDbService.saveDemandsDirectly(merged);
               }
+
+              if (
+                cleanPrev.length === merged.length &&
+                cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.columnId === merged[idx]?.columnId && p.title === merged[idx]?.title)
+              ) {
+                return prev;
+              }
+
+              try {
+                localStorage.setItem('agency_demands', JSON.stringify(merged));
+              } catch {}
+              return merged;
             });
-
-            // Auto-cura: se houver demandas criadas localmente que o servidor ainda não tem, persiste imediatamente
-            if (localPending.length > 0) {
-              serverDbService.saveDatabase({ demands: merged }, true);
-              serverDbService.saveDemandsDirectly(merged);
-            }
-
-            if (
-              cleanPrev.length === merged.length &&
-              cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.columnId === merged[idx]?.columnId && p.title === merged[idx]?.title)
-            ) {
-              return prev;
-            }
-
-            try {
-              localStorage.setItem('agency_demands', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
+          }
         }
 
         if (remoteData.services && Array.isArray(remoteData.services)) {
-          const deletedServiceIds = getDeletedServiceIds();
-          const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
+          if (remoteData.services.length === 0) {
+            setServices((prev) => {
+              if (prev.length === 0) return prev;
+              try {
+                localStorage.setItem('agency_services', JSON.stringify([]));
+              } catch {}
+              return [];
+            });
+          } else {
+            const deletedServiceIds = getDeletedServiceIds();
+            const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
 
-          setServices((prev) => {
-            const cleanPrev = prev.filter((s) => !deletedServiceIds.has(s.id));
-            const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
-            const localPending = cleanPrev.filter((s) => !remoteMap.has(s.id));
-            const merged = [...cleanRemote, ...localPending];
+            setServices((prev) => {
+              const cleanPrev = prev.filter((s) => !deletedServiceIds.has(s.id));
+              const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
+              const localPending = cleanPrev.filter((s) => !remoteMap.has(s.id));
+              const merged = [...cleanRemote, ...localPending];
 
-            if (
-              cleanPrev.length === merged.length &&
-              cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.title === merged[idx]?.title && p.basePrice === merged[idx]?.basePrice)
-            ) {
-              return prev;
-            }
+              if (
+                cleanPrev.length === merged.length &&
+                cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.title === merged[idx]?.title && p.basePrice === merged[idx]?.basePrice)
+              ) {
+                return prev;
+              }
 
-            try {
-              localStorage.setItem('agency_services', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
+              try {
+                localStorage.setItem('agency_services', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
         }
 
         if (remoteData.proposals && Array.isArray(remoteData.proposals)) {
@@ -949,34 +1037,37 @@ export function Layout({ children, onLogout }: LayoutProps) {
         const pushPayload: any = {};
 
         if (remoteData) {
-          // 1. CLIENTES (Mescla inteligente: mantém clientes locais pendentes sem perda de dados)
+          // 1. CLIENTES (Mescla inteligente: mantém clientes locais pendentes apenas quando a base não estiver limpa)
           const deletedClientIds = getDeletedClientIds();
           const cleanLocalClients = localClients.filter((c) => !deletedClientIds.has(c.id));
           if (remoteData.clients && Array.isArray(remoteData.clients)) {
-            const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
-            const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
-            const localPending = cleanLocalClients.filter((c) => !remoteMap.has(c.id));
-            const merged = [...cleanRemote, ...localPending];
+            if (remoteData.clients.length === 0) {
+              setClients([]);
+              try {
+                localStorage.setItem('agency_clients', JSON.stringify([]));
+              } catch {}
+            } else {
+              const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
+              const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
+              const localPending = cleanLocalClients.filter((c) => !remoteMap.has(c.id));
+              const merged = [...cleanRemote, ...localPending];
 
-            setClients(merged);
-            try {
-              localStorage.setItem('agency_clients', JSON.stringify(merged));
-            } catch {}
-            if (localPending.length > 0) {
-              needsServerPush = true;
-              pushPayload.clients = merged;
+              setClients(merged);
+              try {
+                localStorage.setItem('agency_clients', JSON.stringify(merged));
+              } catch {}
+              if (localPending.length > 0) {
+                needsServerPush = true;
+                pushPayload.clients = merged;
+              }
             }
-          } else if (cleanLocalClients.length > 0) {
-            setClients(cleanLocalClients);
-            needsServerPush = true;
-            pushPayload.clients = cleanLocalClients;
           }
 
-          // 2. DEMANDAS (Mescla inteligente: mantém demandas locais pendentes sem perda de dados)
+          // 2. DEMANDAS (Mescla inteligente: mantém demandas locais pendentes apenas quando a base não estiver limpa)
           const deletedDemandIds = getDeletedDemandIds();
           const cleanLocalDemands = localDemands.filter((d) => !deletedDemandIds.has(d.id));
           let remoteDemandsList = (remoteData.demands && Array.isArray(remoteData.demands)) ? remoteData.demands : [];
-          if (remoteDemandsList.length === 0) {
+          if (remoteDemandsList.length === 0 && (!remoteData || !Array.isArray(remoteData.demands))) {
             try {
               const directDemands = await serverDbService.fetchDemandsDirectly();
               if (Array.isArray(directDemands) && directDemands.length > 0) {
@@ -985,7 +1076,12 @@ export function Layout({ children, onLogout }: LayoutProps) {
             } catch {}
           }
 
-          if (remoteDemandsList.length > 0) {
+          if (Array.isArray(remoteData.demands) && remoteData.demands.length === 0) {
+            setDemands([]);
+            try {
+              localStorage.setItem('agency_demands', JSON.stringify([]));
+            } catch {}
+          } else if (remoteDemandsList.length > 0) {
             const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
             const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
             const localPending = cleanLocalDemands.filter((d) => !remoteMap.has(d.id));
@@ -999,10 +1095,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
               needsServerPush = true;
               pushPayload.demands = merged;
             }
-          } else if (cleanLocalDemands.length > 0) {
-            setDemands(cleanLocalDemands);
-            needsServerPush = true;
-            pushPayload.demands = cleanLocalDemands;
           }
 
           // 3. EQUIPE (TEAM MEMBERS)
@@ -1085,33 +1177,32 @@ export function Layout({ children, onLogout }: LayoutProps) {
             try {
               localStorage.setItem('agency_proposals', JSON.stringify(remoteData.proposals));
             } catch {}
-          } else if (localProposals.length > 0) {
-            setProposals(localProposals);
-            needsServerPush = true;
-            pushPayload.proposals = localProposals;
           }
 
           // 6. SERVIÇOS
           const deletedServiceIds = getDeletedServiceIds();
           const cleanLocalServices = localServices.filter((s) => !deletedServiceIds.has(s.id));
           if (remoteData.services && Array.isArray(remoteData.services)) {
-            const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
-            const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
-            const localPending = cleanLocalServices.filter((s) => !remoteMap.has(s.id));
-            const merged = [...cleanRemote, ...localPending];
+            if (remoteData.services.length === 0) {
+              setServices([]);
+              try {
+                localStorage.setItem('agency_services', JSON.stringify([]));
+              } catch {}
+            } else {
+              const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
+              const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
+              const localPending = cleanLocalServices.filter((s) => !remoteMap.has(s.id));
+              const merged = [...cleanRemote, ...localPending];
 
-            setServices(merged);
-            try {
-              localStorage.setItem('agency_services', JSON.stringify(merged));
-            } catch {}
-            if (localPending.length > 0) {
-              needsServerPush = true;
-              pushPayload.services = merged;
+              setServices(merged);
+              try {
+                localStorage.setItem('agency_services', JSON.stringify(merged));
+              } catch {}
+              if (localPending.length > 0) {
+                needsServerPush = true;
+                pushPayload.services = merged;
+              }
             }
-          } else if (cleanLocalServices.length > 0) {
-            setServices(cleanLocalServices);
-            needsServerPush = true;
-            pushPayload.services = cleanLocalServices;
           }
 
           // 7. FATURAS (INVOICES)
@@ -1119,13 +1210,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
           if (remoteData.invoices && Array.isArray(remoteData.invoices)) {
             const cleanRemoteInvoices = remoteData.invoices.filter((inv: any) => inv && inv.id && !mockInvoiceIds.has(inv.id));
             const normalizedInvoices = cleanRemoteInvoices.map(normalizeInvoice);
-            setInvoices(normalizedInvoices);
-            try {
-              localStorage.setItem('agency_invoices', JSON.stringify(normalizedInvoices));
-            } catch {}
-          } else {
-            const cleanLocalInvoices = localInvoices.filter((inv: any) => inv && inv.id && !mockInvoiceIds.has(inv.id));
-            const normalizedInvoices = cleanLocalInvoices.map(normalizeInvoice);
             setInvoices(normalizedInvoices);
             try {
               localStorage.setItem('agency_invoices', JSON.stringify(normalizedInvoices));

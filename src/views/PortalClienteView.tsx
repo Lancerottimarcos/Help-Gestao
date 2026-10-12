@@ -120,26 +120,26 @@ export const isAprovacaoClienteColumn = (columnId?: string, columns?: KanbanColu
 };
 
 const defaultFallbackClient: Client = {
-  id: 'client-portal-pub',
-  name: 'Portal Publicitário',
-  companyName: 'Portal Publicitário',
-  segment: 'Comunicação & Mídia',
-  contactName: 'Equipe de conteúdo',
-  contactRole: 'Gerente de Contas',
-  email: 'contato@exemplo.com.br',
-  phone: '(21) 90000-0000',
+  id: '',
+  name: 'Nenhum cliente cadastrado',
+  companyName: 'Nenhum cliente cadastrado',
+  segment: 'Geral',
+  contactName: '',
+  contactRole: '',
+  email: '',
+  phone: '',
   avatar: '',
   coverColor: '#ff9800',
   status: 'Ativo',
-  monthlyFee: 2500,
-  services: ['Social Media', 'Conteúdo'],
+  monthlyFee: 0,
+  services: [],
   activeDemandsCount: 0,
-  joinedDate: '15/01/2026',
-  website: 'https://portalpublicitario.com.br',
-  instagram: '@portalpublicitario',
-  city: 'Rio de Janeiro',
-  state: 'RJ',
-  address: 'Av. das Américas, 4200 - Barra da Tijuca',
+  joinedDate: '',
+  website: '',
+  instagram: '',
+  city: '',
+  state: '',
+  address: '',
 };
 
 export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
@@ -278,12 +278,12 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
       return activeClient.services.length * 1500;
     }
 
-    return 2500;
+    return 0;
   }, [activeClient, services, invoices]);
 
   // Data em que virou cliente (formatada para exibição na ficha)
   const formattedJoinedDate = useMemo(() => {
-    if (!activeClient.joinedDate) return '15/01/2026';
+    if (!activeClient.joinedDate) return 'Sem data cadastrada';
     const val = String(activeClient.joinedDate).trim();
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) return val;
     if (/^\d{4}-\d{2}-\d{2}/.test(val)) {
@@ -434,7 +434,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     setTimeout(() => setCopiedPix(false), 2500);
   };
 
-  // Nome amigável de saudação da cliente (ex: "Olá, Ana")
+  // Nome amigável de saudação da cliente (ex: "Olá, Marcos")
   const greetingName = useMemo(() => {
     if (currentUser?.name && isClientRole) {
       const clean = currentUser.name.trim().split(/\s+/)[0];
@@ -444,21 +444,21 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
       const clean = activeClient.contactName.trim().split(/\s+/)[0];
       if (clean && clean.length > 1) return clean;
     }
-    if (activeClient.name) {
+    if (activeClient.name && activeClient.name !== 'Nenhum cliente cadastrado') {
       const clean = activeClient.name.trim().split(/\s+/)[0];
       if (clean && clean.length > 1) return clean;
     }
-    return 'Ana';
+    return 'Cliente';
   }, [currentUser?.name, isClientRole, activeClient.contactName, activeClient.name]);
 
   // Dados do Contrato da Cliente (Mensalidade, Renovação, Cobrança e Serviços ativos)
   const contractDetails = useMemo(() => {
     const totalMonthlyFee = typeof activeClient.monthlyFee === 'number' && activeClient.monthlyFee > 0
       ? activeClient.monthlyFee
-      : 4500;
+      : 0;
 
-    let renewalDateStr = '05/02/2027';
-    let renewalRelative = 'em 4 meses';
+    let renewalDateStr = '-';
+    let renewalRelative = 'Sem data';
 
     if (activeClient.joinedDate) {
       try {
@@ -480,7 +480,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
       } catch {}
     }
 
-    let billingDayStr = 'Dia 5';
+    let billingDayStr = '-';
     if (invoices && invoices.length > 0) {
       const cInv = invoices.find(inv => inv.client?.toLowerCase().trim() === activeClient.name?.toLowerCase().trim());
       if (cInv && cInv.dueDate) {
@@ -492,21 +492,13 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
 
     const rawServices = activeClient.services && activeClient.services.length > 0
       ? activeClient.services
-      : ['Gestão de redes sociais', 'Produção de conteúdo'];
+      : [];
 
-    let serviceItems: Array<{ name: string; price: number; status: string }> = [];
-    if (rawServices.length === 2 && totalMonthlyFee === 4500) {
-      serviceItems = [
-        { name: 'Gestão de redes sociais', price: 3000, status: 'Ativo' },
-        { name: 'Produção de conteúdo', price: 1500, status: 'Ativo' },
-      ];
-    } else {
-      serviceItems = rawServices.map((name) => {
-        const matched = services.find(s => s.title.toLowerCase().trim() === name.toLowerCase().trim());
-        const price = matched?.basePrice || Math.round(totalMonthlyFee / Math.max(1, rawServices.length));
-        return { name, price, status: 'Ativo' };
-      });
-    }
+    const serviceItems = rawServices.map((name) => {
+      const matched = services.find(s => (s.title || (s as any).name || '').toLowerCase().trim() === name.toLowerCase().trim());
+      const price = matched?.basePrice || (totalMonthlyFee > 0 ? Math.round(totalMonthlyFee / Math.max(1, rawServices.length)) : 0);
+      return { name, price, status: 'Ativo' };
+    });
 
     return {
       monthlyFee: totalMonthlyFee,
@@ -517,11 +509,11 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     };
   }, [activeClient.monthlyFee, activeClient.joinedDate, activeClient.services, activeClient.name, invoices, services]);
 
-  // Itens para aprovação no card "Para aprovar"
+  // Itens para aprovação no card "Para aprovar" (somente demandas reais da coluna Aprovação Cliente)
   const approvalItems = useMemo(() => {
     if (pendingApprovalDemands.length > 0) {
       return pendingApprovalDemands.map((d) => {
-        let cleanDate = '14/10';
+        let cleanDate = 'Sem prazo';
         if (d.dueDate) {
           if (d.dueDate.includes('/')) {
             const parts = d.dueDate.split('/');
@@ -529,6 +521,8 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           } else if (d.dueDate.includes('-')) {
             const parts = d.dueDate.split('-');
             cleanDate = `${parts[2]}/${parts[1]}`;
+          } else {
+            cleanDate = d.dueDate;
           }
         }
         return {
@@ -536,79 +530,19 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           title: d.title,
           type: d.type ? (d.type.toLowerCase().includes('feed') || d.type.toLowerCase().includes('post') ? 'Feed' : d.type.toLowerCase().includes('stor') ? 'Stories' : 'Feed') : 'Feed',
           date: cleanDate,
-          thumbnail: d.thumbnail || (d.attachments && d.attachments[0]?.url) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+          thumbnail: d.thumbnail || (d.attachments && d.attachments[0]?.url) || '',
           isReal: true,
           demand: d,
         };
       });
     }
 
-    // Peças demonstrativas fiéis à imagem anexada de referência
-    const demoPosts = [
-      {
-        id: 'demo-post-flamengo',
-        title: 'Flamengo divulga os 5 finalistas no uniforme feito pelo público',
-        type: 'Feed',
-        date: '12/10 às 18:00',
-        thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-        isReal: false,
-        demand: {
-          id: 'DEM-FLAMENGO-01',
-          title: 'Flamengo divulga os 5 finalistas no uniforme feito pelo público',
-          client: activeClient.name || 'Portal Publicitário',
-          description: 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.',
-          type: 'Feed',
-          status: 'aprovacao',
-          approvalStatus: 'pendente',
-          dueDate: '12/10 às 18:00',
-          clientProject: 'Concurso Manto da Massa',
-        } as unknown as DemandItem,
-      },
-      {
-        id: 'demo-post-1',
-        title: 'Valorize o Social Media',
-        type: 'Feed',
-        date: '14/10',
-        thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-        isReal: false,
-        demand: {
-          id: 'DEM-SOCIAL-02',
-          title: 'Valorize o Social Media',
-          client: activeClient.name || 'Portal Publicitário',
-          description: 'Por trás de cada post viral existe um profissional que estuda métricas, tendências, algoritmos e comportamento do consumidor todos os dias. Valorize seu Social Media!',
-          type: 'Feed',
-          status: 'aprovacao',
-          approvalStatus: 'pendente',
-          dueDate: '14/10',
-          clientProject: 'Campanha Institucional',
-        } as unknown as DemandItem,
-      },
-      {
-        id: 'demo-post-2',
-        title: 'Marketing não salva produto ruim',
-        type: 'Feed',
-        date: '16/10',
-        thumbnail: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=200&auto=format&fit=crop&q=80',
-        isReal: false,
-        demand: {
-          id: 'DEM-MKT-03',
-          title: 'Marketing não salva produto ruim',
-          client: activeClient.name || 'Portal Publicitário',
-          description: 'A propaganda atrai novos clientes para a porta da sua empresa, mas é a qualidade impecável da entrega que faz eles voltarem e recomendarem.',
-          type: 'Feed',
-          status: 'aprovacao',
-          approvalStatus: 'pendente',
-          dueDate: '16/10',
-          clientProject: 'Branding & Posicionamento',
-        } as unknown as DemandItem,
-      },
-    ];
-
-    return demoPosts.filter(p => !approvedDemoIds.has(p.id));
-  }, [pendingApprovalDemands, approvedDemoIds, activeClient.name]);
+    return [];
+  }, [pendingApprovalDemands]);
 
   // Item e Demanda atualmente selecionados na Central de Prévia & Aprovação
   const currentShowcaseItem = useMemo(() => {
+    if (approvalItems.length === 0) return null;
     if (selectedShowcaseId) {
       const found = approvalItems.find((item) => item.id === selectedShowcaseId);
       if (found) return found;
@@ -618,18 +552,8 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
 
   const showcaseDemand: DemandItem | null = useMemo(() => {
     if (!currentShowcaseItem) return null;
-    if (currentShowcaseItem.demand) return currentShowcaseItem.demand;
-    return {
-      id: currentShowcaseItem.id,
-      title: currentShowcaseItem.title,
-      client: activeClient.name || 'Portal Publicitário',
-      description: 'O clube divulgou os 5 finalistas do uniforme desenhado pela torcida. O designer vencedor leva R$ 10 mil e a camisa.',
-      type: currentShowcaseItem.type,
-      dueDate: currentShowcaseItem.date,
-      status: 'aprovacao',
-      approvalStatus: 'pendente',
-    } as unknown as DemandItem;
-  }, [currentShowcaseItem, activeClient.name]);
+    return currentShowcaseItem.demand || null;
+  }, [currentShowcaseItem]);
 
   const isShowcaseApproved = Boolean(
     currentShowcaseItem && (
@@ -733,6 +657,16 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
               ))}
             </select>
           </div>
+        </div>
+      )}
+
+      {/* Banner de sistema limpo se nenhum cliente estiver cadastrado ainda */}
+      {!isClientRole && clients.length === 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3 text-xs text-amber-800 dark:text-amber-200">
+          <Sparkles size={18} className="text-[#ff9900] shrink-0" />
+          <p className="leading-relaxed">
+            <strong>Portal limpo para o lançamento:</strong> Nenhum cliente cadastrado no momento. Cadastre seu primeiro cliente na aba <strong className="text-[#ff9900]">Clientes</strong> para ativar o painel exclusivo e aprovação de materiais.
+          </p>
         </div>
       )}
 
@@ -1080,26 +1014,34 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
 
               {/* Lista de Serviços Contratados */}
               <div className="space-y-2.5 sm:space-y-3 pt-1">
-                {contractDetails.services.map((serv, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-all"
-                  >
-                    <div>
-                      <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                        {serv.name}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium font-mono pt-0.5">
-                        R$ {serv.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} por mês
-                      </p>
-                    </div>
-
-                    <span className="px-3.5 py-1 rounded-full bg-emerald-600 text-white font-bold text-xs tracking-wide shadow-xs shrink-0 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                      <span>{serv.status}</span>
-                    </span>
+                {contractDetails.services.length === 0 ? (
+                  <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-dashed border-slate-200 dark:border-slate-800/80 text-center">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      Nenhum serviço registrado para este contrato ainda.
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  contractDetails.services.map((serv, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-all"
+                    >
+                      <div>
+                        <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                          {serv.name}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium font-mono pt-0.5">
+                          R$ {serv.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} por mês
+                        </p>
+                      </div>
+
+                      <span className="px-3.5 py-1 rounded-full bg-emerald-600 text-white font-bold text-xs tracking-wide shadow-xs shrink-0 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        <span>{serv.status}</span>
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1425,12 +1367,15 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                 <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
                 <button
                   type="button"
-                  onClick={() => handleCopyEmail(activeClient.email || 'contato@exemplo.com.br')}
-                  className="font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono hover:text-[#ff9900] transition-colors cursor-pointer flex items-center gap-1 group"
-                  title="Clique para copiar e-mail"
+                  onClick={() => handleCopyEmail(activeClient.email || '')}
+                  disabled={!activeClient.email}
+                  className={`font-bold text-slate-800 dark:text-slate-200 shrink-0 text-right font-mono transition-colors flex items-center gap-1 group ${
+                    activeClient.email ? 'hover:text-[#ff9900] cursor-pointer' : 'cursor-default text-slate-400'
+                  }`}
+                  title={activeClient.email ? 'Clique para copiar e-mail' : 'Não informado'}
                 >
-                  <span>{activeClient.email || 'contato@exemplo.com.br'}</span>
-                  {copiedEmail ? <Check size={12} className="text-emerald-500" /> : <Copy size={11} className="text-slate-400 group-hover:text-[#ff9900]" />}
+                  <span>{activeClient.email || 'Não informado'}</span>
+                  {activeClient.email && (copiedEmail ? <Check size={12} className="text-emerald-500" /> : <Copy size={11} className="text-slate-400 group-hover:text-[#ff9900]" />)}
                 </button>
               </div>
 
@@ -1442,7 +1387,14 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                 </div>
                 <div className="flex-1 mx-3 border-b border-dashed border-slate-200 dark:border-slate-800" />
                 {(() => {
-                  const rawPhone = activeClient.phone || '(21) 90000-0000';
+                  const rawPhone = activeClient.phone?.trim() || '';
+                  if (!rawPhone) {
+                    return (
+                      <span className="font-bold text-slate-400 shrink-0 text-right font-mono text-xs">
+                        Não informado
+                      </span>
+                    );
+                  }
                   const cleanP = rawPhone.replace(/\D/g, '');
                   const wa = cleanP.length >= 10 ? `https://wa.me/55${cleanP}` : undefined;
                   return wa ? (
@@ -1509,7 +1461,7 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
               <div className="flex items-center gap-1.5">
                 <Building2 size={13} className="text-[#ff9900]" />
-                <span>Segmento: <strong>{activeClient.segment || 'Comunicação & Mídia'}</strong></span>
+                <span>Segmento: <strong>{activeClient.segment || 'Geral'}</strong></span>
               </div>
               {activeClient.city && (
                 <div className="flex items-center gap-1 text-[11px]">

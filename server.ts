@@ -619,12 +619,10 @@ async function startServer() {
   // Central Database (compartilha clientes, demandas, equipe e finanças entre todos os computadores via Cache em disco + Firestore)
   app.get("/api/database", async (_req, res) => {
     let data = getDatabaseState();
-    const hasClients = Array.isArray(data.clients) && data.clients.length > 0;
-    const hasDemands = Array.isArray(data.demands) && data.demands.length > 0;
     const hasTeamMembers = Array.isArray(data.teamMembers) && data.teamMembers.length > 0;
 
-    // Se clientes, demandas OU equipe estiverem vazios na memória, tenta carregar do Firestore sob demanda
-    if (!hasClients || !hasDemands || !hasTeamMembers) {
+    // Se equipe estiver vazia na memória, tenta carregar do Firestore sob demanda
+    if (!hasTeamMembers) {
       try {
         const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
         if (remote) {
@@ -641,6 +639,49 @@ async function startServer() {
       data,
       timestamp: Date.now(),
     });
+  });
+
+  // Limpeza total de dados para lançamento oficial da agência
+  app.post("/api/clean-launch", async (_req, res) => {
+    try {
+      const current = getDatabaseState();
+      const updated = {
+        ...current,
+        clients: [],
+        demands: [],
+        services: [],
+        proposals: [],
+        invoices: [],
+        activities: [],
+        deletedDemandIds: [],
+        updatedAt: Date.now(),
+      };
+      persistDatabaseState(updated);
+      scheduleSyncToFirestore({
+        clients: [],
+        demands: [],
+        services: [],
+        proposals: [],
+        invoices: [],
+        activities: [],
+      });
+      try {
+        broadcast({
+          type: "database:update",
+          data: updated,
+          demands: [],
+          clients: [],
+          services: [],
+          teamMembers: updated.teamMembers,
+        });
+        broadcast({ type: "demands:update", demands: [] });
+      } catch {}
+      console.log("[Database Server] Sistema limpo com sucesso para o lançamento oficial.");
+      res.json({ success: true, message: "Sistema limpo com sucesso para o lançamento." });
+    } catch (e: any) {
+      console.error("Erro ao executar clean-launch:", e);
+      res.status(500).json({ success: false, error: "Erro ao limpar dados do sistema." });
+    }
   });
 
   app.post("/api/database", async (req, res) => {
@@ -670,12 +711,14 @@ async function startServer() {
 
       // Mescla com os dados em memória existentes (imutável e livre de corrida de I/O)
       const currentData = getDatabaseState();
+      const isExplicitClear = Boolean(body.allowEmpty || body.cleanLaunch || body.forceEmpty);
 
       const sanitizedUpdate: Record<string, any> = {};
       for (const key of Object.keys(body)) {
         if (ALLOWED_COLLECTIONS.includes(key) && body[key] !== undefined && body[key] !== null) {
-          // Proteção atômica: Impede que um dispositivo recém-aberto com lista vazia sobrescreva dados cadastrados no banco
+          // Proteção atômica: Impede que um dispositivo recém-aberto com lista vazia sobrescreva dados cadastrados no banco acidentalmente
           if (
+            !isExplicitClear &&
             (key === "demands" || key === "clients" || key === "teamMembers") &&
             Array.isArray(body[key]) &&
             body[key].length === 0 &&
@@ -698,22 +741,26 @@ async function startServer() {
 
       // Preserva e mescla demandas para evitar desaparecimento por sincronização desatualizada
       if (Array.isArray(sanitizedUpdate.demands)) {
-        const deletedIds = new Set([
-          ...(Array.isArray(currentData.deletedDemandIds) ? currentData.deletedDemandIds : []),
-          ...(Array.isArray(sanitizedUpdate.deletedDemandIds) ? sanitizedUpdate.deletedDemandIds : []),
-        ]);
+        if (sanitizedUpdate.demands.length === 0 && isExplicitClear) {
+          sanitizedUpdate.demands = [];
+        } else {
+          const deletedIds = new Set([
+            ...(Array.isArray(currentData.deletedDemandIds) ? currentData.deletedDemandIds : []),
+            ...(Array.isArray(sanitizedUpdate.deletedDemandIds) ? sanitizedUpdate.deletedDemandIds : []),
+          ]);
 
-        const currentDemands = (Array.isArray(currentData.demands) ? currentData.demands : [])
-          .filter((d: any) => d && d.id && !deletedIds.has(d.id));
-        const incomingDemands = sanitizedUpdate.demands
-          .filter((d: any) => d && d.id && !deletedIds.has(d.id));
+          const currentDemands = (Array.isArray(currentData.demands) ? currentData.demands : [])
+            .filter((d: any) => d && d.id && !deletedIds.has(d.id));
+          const incomingDemands = sanitizedUpdate.demands
+            .filter((d: any) => d && d.id && !deletedIds.has(d.id));
 
-        const incomingMap = new Map(incomingDemands.map((d: any) => [d.id, d]));
-        const updatedCurrent = currentDemands.map((d: any) => incomingMap.get(d.id) || d);
-        const currentIds = new Set(currentDemands.map((d: any) => d.id));
-        const brandNew = incomingDemands.filter((d: any) => !currentIds.has(d.id));
+          const incomingMap = new Map(incomingDemands.map((d: any) => [d.id, d]));
+          const updatedCurrent = currentDemands.map((d: any) => incomingMap.get(d.id) || d);
+          const currentIds = new Set(currentDemands.map((d: any) => d.id));
+          const brandNew = incomingDemands.filter((d: any) => !currentIds.has(d.id));
 
-        sanitizedUpdate.demands = [...brandNew, ...updatedCurrent];
+          sanitizedUpdate.demands = [...brandNew, ...updatedCurrent];
+        }
       }
 
       // Preserva fotos em base64 da equipe permanentemente (sem substituir por URLs locais efêmeras)
