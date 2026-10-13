@@ -82,7 +82,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   // Clean Launch Reset Handler: garante que clientes, demandas e serviços antigos sejam removidos para o lançamento
   useEffect(() => {
     try {
-      const CLEAN_KEY = 'agency_clean_launch_v2026_production_clean';
+      const CLEAN_KEY = 'agency_clean_launch_pronto_lancamento_v1';
       if (typeof window !== 'undefined' && localStorage.getItem(CLEAN_KEY) !== 'true') {
         localStorage.removeItem('agency_demands');
         localStorage.removeItem('agency_clients');
@@ -107,6 +107,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
         setProposals([]);
         setInvoices([]);
         setActivities([]);
+        fetch('/api/clean-launch', { method: 'POST' }).catch(() => {});
       }
     } catch {}
   }, []);
@@ -115,7 +116,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [demands, setDemands] = useState<DemandItem[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
           return [];
         }
         const saved = localStorage.getItem('agency_demands');
@@ -131,7 +132,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [clients, setClients] = useState<Client[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
           return [];
         }
         const saved = localStorage.getItem('agency_clients');
@@ -149,7 +150,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [services, setServices] = useState<Service[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
           return [];
         }
         const saved = localStorage.getItem('agency_services');
@@ -165,7 +166,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [proposals, setProposals] = useState<BudgetProposal[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
           return [];
         }
         const saved = localStorage.getItem('agency_proposals');
@@ -181,7 +182,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_v2026_production_clean') !== 'true') {
+        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
           return [];
         }
         const saved = localStorage.getItem('agency_invoices');
@@ -381,14 +382,15 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const getDeletedDemandIds = (): Set<string> => {
+    const defaultDeleted = ['DEM-619432', 'DEM-269498'];
     try {
       const raw = localStorage.getItem('agency_deleted_demand_ids');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return new Set(parsed);
+        if (Array.isArray(parsed)) return new Set([...defaultDeleted, ...parsed]);
       }
     } catch {}
-    return new Set();
+    return new Set(defaultDeleted);
   };
 
   const addDeletedDemandId = (id: string) => {
@@ -410,14 +412,15 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const getDeletedClientIds = (): Set<string> => {
+    const defaultDeleted = ['cli-1791824669456'];
     try {
       const raw = localStorage.getItem('agency_deleted_client_ids');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return new Set(parsed);
+        if (Array.isArray(parsed)) return new Set([...defaultDeleted, ...parsed]);
       }
     } catch {}
-    return new Set();
+    return new Set(defaultDeleted);
   };
 
   const addDeletedClientId = (id: string) => {

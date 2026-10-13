@@ -26,38 +26,70 @@ function getCookie(name: string): string {
  * Obtém a URL configurada (prioridade: variáveis de ambiente VITE_*, seguido de localStorage, depois cookie)
  */
 export function getSupabaseUrl(): string {
+  const isInvalidUrl = (u: string) => !u || u.includes('your-project') || u.includes('pniiwmpxtvckivufrqhn');
+
   const envUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
-  if (envUrl && !envUrl.includes('your-project')) return envUrl;
+  if (envUrl && !isInvalidUrl(envUrl)) return envUrl;
   
   try {
     const fromStorage = (localStorage.getItem(STORAGE_KEY_URL) || '').trim();
-    if (fromStorage && !fromStorage.includes('your-project')) return fromStorage;
+    if (fromStorage) {
+      if (isInvalidUrl(fromStorage)) {
+        localStorage.removeItem(STORAGE_KEY_URL);
+      } else {
+        return fromStorage;
+      }
+    }
   } catch {}
 
   const fromCookie = getCookie(STORAGE_KEY_URL).trim();
-  if (fromCookie && !fromCookie.includes('your-project')) return fromCookie;
+  if (fromCookie) {
+    if (isInvalidUrl(fromCookie)) {
+      try {
+        document.cookie = `${STORAGE_KEY_URL}=;path=/;max-age=0`;
+      } catch {}
+    } else {
+      return fromCookie;
+    }
+  }
 
-  // URL padrão configurada no servidor do projeto
-  return 'https://pniiwmpxtvckivufrqhn.supabase.co';
+  // Nenhuma URL ativa por padrão quando não configurado
+  return '';
 }
 
 /**
  * Obtém a Chave Anônima / Pública (prioridade: VITE_*, seguido de localStorage, depois cookie)
  */
 export function getSupabaseAnonKey(): string {
+  const isInvalidKey = (k: string) => !k || k.includes('your-anon') || k.includes('sb_publishable_VaKxwO3n2CZWMmYUyGUVrA_ZD7H83RB');
+
   const envKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim();
-  if (envKey && !envKey.includes('your-anon')) return envKey;
+  if (envKey && !isInvalidKey(envKey)) return envKey;
 
   try {
     const fromStorage = (localStorage.getItem(STORAGE_KEY_ANON) || '').trim();
-    if (fromStorage && !fromStorage.includes('your-anon')) return fromStorage;
+    if (fromStorage) {
+      if (isInvalidKey(fromStorage)) {
+        localStorage.removeItem(STORAGE_KEY_ANON);
+      } else {
+        return fromStorage;
+      }
+    }
   } catch {}
 
   const fromCookie = getCookie(STORAGE_KEY_ANON).trim();
-  if (fromCookie && !fromCookie.includes('your-anon')) return fromCookie;
+  if (fromCookie) {
+    if (isInvalidKey(fromCookie)) {
+      try {
+        document.cookie = `${STORAGE_KEY_ANON}=;path=/;max-age=0`;
+      } catch {}
+    } else {
+      return fromCookie;
+    }
+  }
 
-  // Chave anônima padrão configurada no servidor do projeto
-  return 'sb_publishable_VaKxwO3n2CZWMmYUyGUVrA_ZD7H83RB';
+  // Nenhuma chave ativa por padrão quando não configurado
+  return '';
 }
 
 /**
@@ -127,7 +159,7 @@ export async function syncSupabaseCredentialsWithServer(): Promise<boolean> {
       if (data?.url && data?.anonKey) {
         const cleanUrl = String(data.url).trim();
         const cleanKey = String(data.anonKey).trim();
-        if (cleanUrl && cleanKey) {
+        if (cleanUrl && cleanKey && !cleanUrl.includes('pniiwmpxtvckivufrqhn') && !cleanUrl.includes('your-project')) {
           localStorage.setItem(STORAGE_KEY_URL, cleanUrl);
           document.cookie = `${STORAGE_KEY_URL}=${encodeURIComponent(cleanUrl)};path=/;max-age=31536000;SameSite=Lax`;
           localStorage.setItem(STORAGE_KEY_ANON, cleanKey);

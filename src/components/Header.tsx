@@ -43,92 +43,18 @@ interface HeaderProps {
   clientsCount?: number;
 }
 
-const STORAGE_KEY = 'help_agency_notifications_v3';
-
-const SAMPLE_APPROVAL_NOTIFICATIONS: AgencyNotification[] = [
-  {
-    id: 'notif-client-ajuste-1',
-    title: '✏️ Ajuste Solicitado: Traga Transportes',
-    message: 'O cliente solicitou alterações no material "Carrossel Institucional Logística": "Por favor, alterar a cor do botão na lâmina 3 e atualizar o telefone do rodapé". Peça retornada para Produção.',
-    timestamp: 'Hoje, 11:20',
-    type: 'approval',
-    subType: 'client_change_request',
-    read: false,
-    targetPage: 'aprovacoes',
-    actionLabel: 'Ver Ajustes no Portal',
-    clientName: 'Traga Transportes',
-    feedback: 'Por favor, alterar a cor do botão na lâmina 3 e atualizar o telefone do rodapé',
-  },
-  {
-    id: 'notif-client-aprovado-1',
-    title: '✅ Material Aprovado: Zoppellari Visual',
-    message: 'O cliente aprovou o material "Post Lançamento Linha 2026" diretamente pelo Portal do Cliente. Demanda transferida para Agendamento e publicação.',
-    timestamp: 'Hoje, 10:45',
-    type: 'approval',
-    subType: 'client_approved',
-    read: false,
-    targetPage: 'aprovacoes',
-    actionLabel: 'Ver Agendamento',
-    clientName: 'Zoppellari Visual',
-  },
-  {
-    id: 'notif-client-ajuste-2',
-    title: '✏️ Ajuste Solicitado: Fox Combustíveis',
-    message: 'O cliente pediu ajuste no criativo "Campanha Abasteça e Ganhe": "Trocar o desconto de 10% para 15% na legenda e na lâmina principal".',
-    timestamp: 'Ontem, 16:30',
-    type: 'approval',
-    subType: 'client_change_request',
-    read: false,
-    targetPage: 'aprovacoes',
-    actionLabel: 'Ver Ajustes no Portal',
-    clientName: 'Fox Combustíveis',
-    feedback: 'Trocar o desconto de 10% para 15% na legenda e na lâmina principal',
-  },
-  {
-    id: 'notif-client-aprovado-2',
-    title: '✅ Material Aprovado: Supera Reabilitação',
-    message: 'O cliente aprovou o criativo "Vídeo Dicas Postura no Trabalho". Demanda pronta e autorizada para publicação.',
-    timestamp: 'Ontem, 14:10',
-    type: 'approval',
-    subType: 'client_approved',
-    read: true,
-    targetPage: 'aprovacoes',
-    actionLabel: 'Ver Agendamento',
-    clientName: 'Supera Reabilitação',
-  },
-];
+const STORAGE_KEY = 'help_agency_notifications_v4';
 
 const DEFAULT_NOTIFICATIONS: AgencyNotification[] = [
-  ...SAMPLE_APPROVAL_NOTIFICATIONS,
-  {
-    id: 'notif-sec-1',
-    title: 'Autenticação 2FA & Protocolo Antifraude',
-    message: 'Ações sensíveis como exclusão de múltiplos clientes ou faturas e alterações globais agora exigem verificação 2FA temporária.',
-    timestamp: 'Ontem, 12:00',
-    type: 'security',
-    read: true,
-    targetPage: 'configuracoes',
-    actionLabel: 'Ver Segurança',
-  },
   {
     id: 'notif-1',
     title: 'Sistema Pronto para Operação',
-    message: 'A base da Agência Help está ativa e pronta para produção e gestão de clientes.',
-    timestamp: 'Hoje, 09:00',
+    message: 'A base da Agência Help está limpa e pronta para o lançamento oficial.',
+    timestamp: 'Hoje',
     type: 'system',
     read: true,
     targetPage: 'clientes',
     actionLabel: 'Ver Clientes',
-  },
-  {
-    id: 'notif-2',
-    title: 'Calendário Editorial 2026 Ativo',
-    message: 'Mais de 100 datas comemorativas, feriados e ganchos prontos para criar demandas e posts para seus clientes.',
-    timestamp: 'Hoje, 08:30',
-    type: 'calendar',
-    read: true,
-    targetPage: 'calendario',
-    actionLabel: 'Ver Calendário',
   },
 ];
 
@@ -237,19 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Garante que notificações essenciais de aprovação e ajuste de material estejam sempre presentes
-          const hasApproval = parsed.some((n: AgencyNotification) => n.subType === 'client_approved' || (n.type === 'approval' && n.title.includes('Aprovad')));
-          const hasChangeReq = parsed.some((n: AgencyNotification) => n.subType === 'client_change_request' || n.title.includes('Ajuste Solicitado'));
-          
-          let merged = [...parsed];
-          if (!hasApproval || !hasChangeReq) {
-            SAMPLE_APPROVAL_NOTIFICATIONS.forEach((sample) => {
-              if (!merged.some((m) => m.id === sample.id || m.title === sample.title)) {
-                merged.unshift(sample);
-              }
-            });
-          }
-          return merged;
+          return parsed;
         }
       }
     } catch {}

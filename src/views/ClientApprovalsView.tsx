@@ -789,26 +789,32 @@ export const ClientApprovalsView: React.FC<ClientApprovalsViewProps> = ({
                 <CheckCircle2 size={24} />
               </div>
               <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
-                {isClientRole && (selectedStatusFilter === 'todos' || selectedStatusFilter === 'pendente')
+                {totalCount === 0
+                  ? 'Nenhum post no fluxo de aprovação'
+                  : isClientRole && (selectedStatusFilter === 'todos' || selectedStatusFilter === 'pendente')
                   ? 'Nenhum post aguardando aprovação no momento'
                   : 'Nenhum post encontrado com os filtros selecionados'}
               </h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                {isClientRole && (selectedStatusFilter === 'todos' || selectedStatusFilter === 'pendente')
+                {totalCount === 0
+                  ? 'O painel de aprovação está zerado e pronto para o lançamento do sistema. Assim que novas demandas forem direcionadas para a coluna "Aprovação cliente", elas aparecerão aqui para conferência.'
+                  : isClientRole && (selectedStatusFilter === 'todos' || selectedStatusFilter === 'pendente')
                   ? 'Assim que a equipe da agência finalizar a produção e mover as demandas para a coluna "Aprovação Cliente", elas aparecerão aqui para você aprovar.'
                   : 'Tente redefinir os filtros de status ou tipo para visualizar todos os criativos.'}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStatusFilter('todos');
-                  setSelectedTypeFilter('todos');
-                  setSearchQuery('');
-                }}
-                className="px-4 py-2 rounded-full bg-[#142142] dark:bg-[#fab518] text-white dark:text-[#142142] text-xs font-bold cursor-pointer"
-              >
-                Limpar Filtros
-              </button>
+              {totalCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStatusFilter('todos');
+                    setSelectedTypeFilter('todos');
+                    setSearchQuery('');
+                  }}
+                  className="px-4 py-2 rounded-full bg-[#142142] dark:bg-[#fab518] text-white dark:text-[#142142] text-xs font-bold cursor-pointer"
+                >
+                  Limpar Filtros
+                </button>
+              )}
             </div>
           ) : (
             filteredDemands.map((demand) => {

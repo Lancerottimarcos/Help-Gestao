@@ -665,7 +665,7 @@ export const InicioView: React.FC<InicioViewProps> = ({
                   {clients.length}
                 </div>
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 truncate">
-                  {activeClients.length} ativas · {clients.length - activeClients.length} em onboarding/outras
+                  {clients.length === 0 ? '0 ativas · Nenhuma empresa cadastrada' : `${activeClients.length} ativas · ${clients.length - activeClients.length} em onboarding`}
                 </p>
               </div>
             </div>

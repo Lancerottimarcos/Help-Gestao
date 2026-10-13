@@ -1836,30 +1836,34 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1">
               <span className="text-[11px] text-slate-500 font-medium">Alcance Total (30d)</span>
-              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">148.200</p>
-              <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
-                <TrendingUp size={11} /> +18.4% vs mês anterior
+              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                {activeClient.id && clientDemands.length > 0 ? '0' : '0'}
+              </p>
+              <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">
+                <TrendingUp size={11} /> 0% no período inicial
               </span>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1">
               <span className="text-[11px] text-slate-500 font-medium">Engajamento Médio</span>
-              <p className="text-2xl font-black text-[#ff9900] font-mono">4.82%</p>
-              <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
-                <TrendingUp size={11} /> +0.6% taxa saudável
+              <p className="text-2xl font-black text-[#ff9900] font-mono">0.00%</p>
+              <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">
+                <TrendingUp size={11} /> Aguardando veiculações
               </span>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1">
               <span className="text-[11px] text-slate-500 font-medium">Publicações Veiculadas</span>
-              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">24 posts</p>
-              <span className="text-[10px] text-slate-400">100% do cronograma cumprido</span>
+              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                {clientDemands.filter(d => d.columnId === 'concluidas' || d.columnId === 'concluidos').length} posts
+              </p>
+              <span className="text-[10px] text-slate-400">Cronograma de lançamento</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1">
               <span className="text-[11px] text-slate-500 font-medium">Novos Seguidores</span>
-              <p className="text-2xl font-black text-emerald-600 font-mono">+1.430</p>
-              <span className="text-[10px] text-slate-400">Público qualificado</span>
+              <p className="text-2xl font-black text-emerald-600 font-mono">0</p>
+              <span className="text-[10px] text-slate-400">Início de monitoramento</span>
             </div>
           </div>
         </div>

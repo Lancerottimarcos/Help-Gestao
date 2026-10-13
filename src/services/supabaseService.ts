@@ -455,6 +455,26 @@ NOTIFY pgrst, 'reload schema';
 `;
 
 /**
+ * Detecta se o erro retornado ou disparado é uma falha de conexão de rede/fetch
+ * (ex: TypeError: Failed to fetch, projeto Supabase pausado/inalcançável, offline, CORS, etc.)
+ */
+export function isNetworkOrFetchError(err: any): boolean {
+  if (!err) return false;
+  const msg = (typeof err === 'string' ? err : err.message || err.details || err.hint || String(err)).toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('fetch failed') ||
+    msg.includes('timeout') ||
+    msg.includes('abort') ||
+    msg.includes('connection refused') ||
+    msg.includes('err_name_not_resolved') ||
+    msg.includes('err_connection_refused') ||
+    err.name === 'TypeError'
+  );
+}
+
+/**
  * Utilitário de auto-cura para upserts no Supabase.
  * Se o PostgREST rejeitar com "Could not find the 'xyz' column of 'table' in the schema cache",
  * remove a coluna não existente e tenta novamente de forma transparente.
@@ -472,10 +492,22 @@ async function resilientSupabaseUpsert(
     : { ...payload };
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const { data, error } = await supabase.from(tableName).upsert(currentPayload);
+    let result: any = null;
+    try {
+      result = await supabase.from(tableName).upsert(currentPayload);
+    } catch (fetchErr: any) {
+      return { data: null, error: fetchErr };
+    }
+
+    const { data, error } = result || {};
 
     if (!error) {
       return { data, error: null };
+    }
+
+    // Se for erro de rede/fetch (ex: Failed to fetch), interrompe imediatamente sem loop desnecessário
+    if (isNetworkOrFetchError(error)) {
+      return { data: null, error };
     }
 
     // 1. Identifica mensagens de coluna ausente do PostgREST
@@ -566,12 +598,15 @@ const LEGACY_COLUMN_ALIASES: Record<string, string> = {
 
 export const supabaseService = {
   isAvailable(): boolean {
-    return getSupabaseClient() !== null;
+    return this.isConfigured();
   },
 
   isConfigured(): boolean {
-    const supabase = getSupabaseClient();
-    return !!supabase;
+    const url = getSupabaseUrl();
+    const key = getSupabaseAnonKey();
+    if (!url || !key || !url.startsWith('http')) return false;
+    if (url.includes('your-project') || url.includes('pniiwmpxtvckivufrqhn')) return false;
+    return getSupabaseClient() !== null;
   },
 
   /**
@@ -704,9 +739,9 @@ export const supabaseService = {
       const client = getSupabaseClient(url, key);
       if (!client) {
         const latencyMs = Date.now() - startTime;
-        console.error(
-          '%c[Supabase Status] ❌ Não foi possível inicializar o cliente Supabase JavaScript.',
-          'color: #ef4444; font-weight: bold;'
+        console.warn(
+          '%c[Supabase Status] ⚠️ Não foi possível inicializar o cliente Supabase JavaScript.',
+          'color: #f59e0b; font-weight: bold;'
         );
         console.groupEnd();
         return { 
@@ -853,9 +888,9 @@ export const supabaseService = {
     } catch (err: any) {
       const totalLatency = Date.now() - startTime;
       const errMsg = err?.message || String(err);
-      console.error(
-        `%c[Supabase Status] ❌ Exceção ao testar conexão (${totalLatency}ms):`,
-        'color: #ef4444; font-weight: bold;',
+      console.warn(
+        `%c[Supabase Status] ⚠️ Falha ao testar conexão (${totalLatency}ms):`,
+        'color: #f59e0b; font-weight: bold;',
         errMsg
       );
       console.log('-> O Help Ideias opera com redundância automática de alta disponibilidade via Servidor Central e Google Cloud Firestore. Seus dados estão salvos.');
@@ -877,15 +912,12 @@ export const supabaseService = {
   // DEMANDAS (KANBAN)
   // ==================================================================
   async fetchDemands(): Promise<DemandItem[] | null> {
+    if (!this.isConfigured()) return null;
     const supabase = getSupabaseClient();
     const url = getSupabaseUrl();
     const env = this.getEnvironmentDiagnostics();
 
-    if (!supabase) {
-      console.warn(`[Supabase Demanda] ⚠️ fetchDemands: Cliente não inicializado no ambiente ${env.deviceType}. Carregando demandas da base central de alta disponibilidade.`);
-      recordSyncFailure('FETCH_DEMANDS', 'Supabase não inicializado ou credenciais ausentes no storage', undefined, 'WARNING');
-      return null;
-    }
+    if (!supabase) return null;
 
     try {
       console.log(`[Supabase Demanda] 📥 Consultando demandas na nuvem Supabase (${env.deviceType} em ${url})...`);
@@ -989,15 +1021,25 @@ export const supabaseService = {
 
       const { error } = await resilientSupabaseUpsert(supabase, 'demands', payload);
       if (error) {
-        console.error(`[Supabase Demanda] ❌ Erro ao gravar demanda "${demand.id}" no PostgreSQL:`, error.message || error);
-        recordSyncFailure('UPSERT_DEMAND', error.message || error, { demandId: demand.id, error });
+        if (isNetworkOrFetchError(error)) {
+          console.warn(`[Supabase Demanda] ℹ️ Conexão Supabase temporariamente inalcançável (${error.message || error}). Demanda "${demand.title}" (ID: ${demand.id}) preservada no banco central.`);
+          recordSyncFailure('UPSERT_DEMAND', error.message || error, { demandId: demand.id }, 'WARNING');
+        } else {
+          console.warn(`[Supabase Demanda] ⚠️ Aviso ao gravar demanda "${demand.id}" no PostgreSQL:`, error.message || error);
+          recordSyncFailure('UPSERT_DEMAND', error.message || error, { demandId: demand.id, error });
+        }
         return false;
       }
       console.log(`[Supabase Demanda] ✅ Demanda "${demand.title}" (ID: ${demand.id}) gravada com sucesso no Supabase PostgreSQL pelo ${env.deviceType}.`);
       return true;
     } catch (e: any) {
-      console.error(`[Supabase Demanda] ⚠️ Exceção ao sincronizar demanda "${demand.id}":`, e?.message || e);
-      recordSyncFailure('UPSERT_DEMAND', e?.message || e, { demandId: demand.id, error: e });
+      if (isNetworkOrFetchError(e)) {
+        console.warn(`[Supabase Demanda] ℹ️ Conexão de rede inalcançável para demanda "${demand.id}". Salvo no banco central.`);
+        recordSyncFailure('UPSERT_DEMAND', e?.message || e, { demandId: demand.id }, 'WARNING');
+      } else {
+        console.warn(`[Supabase Demanda] ⚠️ Aviso ao sincronizar demanda "${demand.id}":`, e?.message || e);
+        recordSyncFailure('UPSERT_DEMAND', e?.message || e, { demandId: demand.id, error: e });
+      }
       return false;
     }
   },
@@ -1010,7 +1052,11 @@ export const supabaseService = {
       console.log(`[Supabase] 🗑️ Excluindo demanda ID: ${id} no PostgreSQL...`);
       const { error } = await supabase.from('demands').delete().eq('id', id);
       if (error) {
-        console.error(`[Supabase] ❌ Erro ao excluir demanda ID: ${id}:`, error.message || error);
+        if (isNetworkOrFetchError(error)) {
+          console.warn(`[Supabase] ℹ️ Conexão Supabase inalcançável ao excluir demanda ID: ${id}. Operação mantida no banco central.`);
+        } else {
+          console.warn(`[Supabase] ⚠️ Aviso ao excluir demanda ID: ${id}:`, error.message || error);
+        }
         recordSyncFailure('DELETE_DEMAND', error.message || error, { id, error });
         return false;
       }
@@ -1151,15 +1197,25 @@ export const supabaseService = {
 
       const { error } = await resilientSupabaseUpsert(supabase, 'clients', payload);
       if (error) {
-        console.error(`[Supabase] ❌ Erro ao gravar cliente "${client.id}" no PostgreSQL:`, error.message || error);
-        recordSyncFailure('UPSERT_CLIENT', error.message || error, { clientId: client.id, error });
+        if (isNetworkOrFetchError(error)) {
+          console.warn(`[Supabase] ℹ️ Conexão Supabase temporariamente inalcançável (${error.message || error}). Cliente "${client.name}" (ID: ${client.id}) preservado no banco central.`);
+          recordSyncFailure('UPSERT_CLIENT', error.message || error, { clientId: client.id }, 'WARNING');
+        } else {
+          console.warn(`[Supabase] ⚠️ Aviso ao gravar cliente "${client.id}" no PostgreSQL:`, error.message || error);
+          recordSyncFailure('UPSERT_CLIENT', error.message || error, { clientId: client.id, error });
+        }
         return false;
       }
       console.log(`[Supabase] ✅ Cliente "${client.name}" (ID: ${client.id}) persistido no PostgreSQL com sucesso.`);
       return true;
     } catch (e: any) {
-      console.error(`[Supabase] ⚠️ Exceção ao sincronizar cliente "${client.id}":`, e?.message || e);
-      recordSyncFailure('UPSERT_CLIENT', e?.message || e, { clientId: client.id, error: e });
+      if (isNetworkOrFetchError(e)) {
+        console.warn(`[Supabase] ℹ️ Conexão de rede inalcançável para cliente "${client.id}". Salvo no banco central.`);
+        recordSyncFailure('UPSERT_CLIENT', e?.message || e, { clientId: client.id }, 'WARNING');
+      } else {
+        console.warn(`[Supabase] ⚠️ Aviso ao sincronizar cliente "${client.id}":`, e?.message || e);
+        recordSyncFailure('UPSERT_CLIENT', e?.message || e, { clientId: client.id, error: e });
+      }
       return false;
     }
   },
@@ -1172,7 +1228,11 @@ export const supabaseService = {
       console.log(`[Supabase] 🗑️ Excluindo cliente ID: ${id} no PostgreSQL...`);
       const { error } = await supabase.from('clients').delete().eq('id', id);
       if (error) {
-        console.error(`[Supabase] ❌ Erro ao excluir cliente ID: ${id}:`, error.message || error);
+        if (isNetworkOrFetchError(error)) {
+          console.warn(`[Supabase] ℹ️ Conexão Supabase inalcançável ao excluir cliente ID: ${id}. Operação mantida no banco central.`);
+        } else {
+          console.warn(`[Supabase] ⚠️ Aviso ao excluir cliente ID: ${id}:`, error.message || error);
+        }
         recordSyncFailure('DELETE_CLIENT', error.message || error, { id, error });
         return false;
       }

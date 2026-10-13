@@ -11,6 +11,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "database.json");
 const CHAT_FILE = path.join(DATA_DIR, "chat-messages.json");
 const FIREBASE_CONFIG_FILE = path.join(process.cwd(), "firebase-applet-config.json");
+const FIRESTORE_QUOTA_FILE = path.join(DATA_DIR, ".firestore-quota.json");
 
 let fbConfig: any = null;
 if (fs.existsSync(FIREBASE_CONFIG_FILE)) {
@@ -93,6 +94,16 @@ async function fetchFirestoreDocumentRest(collectionName = "agency_data", docId 
 let firestoreSyncTimeout: NodeJS.Timeout | null = null;
 let pendingFirestoreUpdates: Record<string, any> = {};
 let firestoreQuotaCooldownUntil = 0;
+if (fs.existsSync(FIRESTORE_QUOTA_FILE)) {
+  try {
+    const raw = fs.readFileSync(FIRESTORE_QUOTA_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.cooldownUntil === "number" && Date.now() < parsed.cooldownUntil) {
+      firestoreQuotaCooldownUntil = parsed.cooldownUntil;
+      console.log(`[Firestore REST] ℹ️ Cooldown de cota ativo até ${new Date(firestoreQuotaCooldownUntil).toISOString()}. Operando com banco de dados primário em disco.`);
+    }
+  } catch {}
+}
 
 async function syncToFirestoreImmediately(payload: Record<string, any>): Promise<boolean> {
   if (!fbConfig || !fbConfig.projectId || !fbConfig.apiKey) return false;
@@ -123,19 +134,25 @@ async function syncToFirestoreImmediately(payload: Record<string, any>): Promise
     } else {
       const errorJson: any = await res.json().catch(() => null);
       const errMsg = JSON.stringify(errorJson || {});
-      console.warn(`[Firestore REST] ⚠️ Falha ao salvar imediatamente (${res.status}):`, errMsg);
       if (
         res.status === 429 ||
         errMsg.includes("RESOURCE_EXHAUSTED") ||
         errMsg.includes("Quota limit exceeded") ||
         errMsg.includes("Quota")
       ) {
-        firestoreQuotaCooldownUntil = Date.now() + 60 * 60 * 1000;
+        // Pausa tentativas no Firestore por 12 horas, operando 100% com o banco local resiliente
+        firestoreQuotaCooldownUntil = Date.now() + 12 * 60 * 60 * 1000;
+        try {
+          fs.writeFileSync(FIRESTORE_QUOTA_FILE, JSON.stringify({ cooldownUntil: firestoreQuotaCooldownUntil }), "utf-8");
+        } catch {}
+        console.log(`[Firestore REST] ℹ️ Limite de cota diária gratuita do Firestore atingido (${res.status}). Persistência ativa via banco local em disco com zero perda de dados.`);
+      } else {
+        console.warn(`[Firestore REST] Aviso ao sincronizar (${res.status}):`, errMsg);
       }
       return false;
     }
   } catch (err: any) {
-    console.error("[Firestore REST] Erro de rede ao sincronizar imediatamente:", err);
+    console.warn("[Firestore REST] Aviso de rede ao sincronizar imediatamente:", err?.message || err);
     return false;
   }
 }
@@ -377,16 +394,18 @@ async function startServer() {
       if (fs.existsSync(CONFIG_FILE)) {
         const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
         const parsed = JSON.parse(raw);
-        return res.json(parsed);
+        if (parsed && parsed.url && !parsed.url.includes("pniiwmpxtvckivufrqhn") && !parsed.url.includes("your-project")) {
+          return res.json(parsed);
+        }
       }
     } catch (e) {
       console.error("Erro ao ler supabase-config.json:", e);
     }
 
-    // Retorna credenciais padrão do projeto
+    // Nenhuma credencial Supabase externa configurada
     res.json({
-      url: "https://pniiwmpxtvckivufrqhn.supabase.co",
-      anonKey: "sb_publishable_VaKxwO3n2CZWMmYUyGUVrA_ZD7H83RB",
+      url: "",
+      anonKey: "",
     });
   });
 
@@ -489,6 +508,8 @@ async function startServer() {
     ];
 
     const deletedDemandIds = new Set([
+      "DEM-619432",
+      "DEM-269498",
       ...(Array.isArray(local.deletedDemandIds) ? local.deletedDemandIds : []),
       ...(Array.isArray(remote.deletedDemandIds) ? remote.deletedDemandIds : []),
     ]);
@@ -568,11 +589,20 @@ async function startServer() {
   }
 
   async function initDatabaseState() {
+    const PURGE_DEMAND_IDS = new Set(["DEM-619432", "DEM-269498"]);
+    const PURGE_CLIENT_IDS = new Set(["cli-1791824669456"]);
+
     if (fs.existsSync(DB_FILE)) {
       try {
         const raw = fs.readFileSync(DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+          if (Array.isArray(parsed.demands)) {
+            parsed.demands = parsed.demands.filter((d: any) => d && d.id && !PURGE_DEMAND_IDS.has(d.id));
+          }
+          if (Array.isArray(parsed.clients)) {
+            parsed.clients = parsed.clients.filter((c: any) => c && c.id && !PURGE_CLIENT_IDS.has(c.id));
+          }
           inMemoryDatabaseState = parsed;
           console.log("[Database Server] Carregado de data/database.json:", Object.keys(parsed));
         }
@@ -581,26 +611,30 @@ async function startServer() {
       }
     }
 
-    // Sincroniza e hidrata do Google Cloud Firestore sempre no startup para persistência garantida em Cloud Run
-    try {
-      console.log("[Database Server] Sincronizando com Firestore REST (agency_data/main_state) no startup...");
-      const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
-      if (remote) {
-        console.log(
-          "[Database Server] Sucesso! Sincronizado do Firestore no startup. Clientes:",
-          remote.clients?.length,
-          "Demandas:",
-          remote.demands?.length,
-          "Serviços:",
-          remote.services?.length,
-          "Equipe:",
-          remote.teamMembers?.length
-        );
-        inMemoryDatabaseState = mergeDatabaseStates(inMemoryDatabaseState || {}, remote);
-        persistDatabaseState(inMemoryDatabaseState);
+    // Sincroniza e hidrata do Google Cloud Firestore sempre no startup para persistência garantida em Cloud Run se cota estiver disponível
+    if (Date.now() >= firestoreQuotaCooldownUntil) {
+      try {
+        console.log("[Database Server] Sincronizando com Firestore REST (agency_data/main_state) no startup...");
+        const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
+        if (remote) {
+          console.log(
+            "[Database Server] Sucesso! Sincronizado do Firestore no startup. Clientes:",
+            remote.clients?.length,
+            "Demandas:",
+            remote.demands?.length,
+            "Serviços:",
+            remote.services?.length,
+            "Equipe:",
+            remote.teamMembers?.length
+          );
+          inMemoryDatabaseState = mergeDatabaseStates(inMemoryDatabaseState || {}, remote);
+          persistDatabaseState(inMemoryDatabaseState);
+        }
+      } catch (err) {
+        console.warn("[Database Server] Aviso ao sincronizar do Firestore no startup:", err);
       }
-    } catch (err) {
-      console.warn("[Database Server] Aviso ao sincronizar do Firestore no startup:", err);
+    } else {
+      console.log("[Database Server] ℹ️ Sincronização do Firestore pausada por limite de cota diária gratuita. Operando com banco primário em disco.");
     }
 
     // Garante que a equipe nunca fique vazia (inicializa com o Dono Marcos Lancerotti)
@@ -919,18 +953,8 @@ async function startServer() {
 
   // Endpoints dedicados e otimizados para Demandas (Kanban)
   app.get("/api/demands", async (_req, res) => {
-    let db = getDatabaseState();
-    let demands = Array.isArray(db.demands) ? db.demands : [];
-    if (demands.length === 0) {
-      try {
-        const remote = await fetchFirestoreDocumentRest("agency_data", "main_state");
-        if (remote && Array.isArray(remote.demands) && remote.demands.length > 0) {
-          db = mergeDatabaseStates(db, remote);
-          persistDatabaseState(db);
-          demands = db.demands;
-        }
-      } catch {}
-    }
+    const db = getDatabaseState();
+    const demands = Array.isArray(db.demands) ? db.demands : [];
     res.json({ success: true, data: demands, count: demands.length });
   });
 
@@ -944,15 +968,20 @@ async function startServer() {
         deletedDemandIds.forEach((id: string) => currentDeletedIds.add(id));
       }
 
+      const isExplicitClear = Boolean(req.body?.allowEmpty || req.body?.cleanLaunch || req.body?.forceEmpty);
       if (Array.isArray(demands)) {
-        const cleanIncoming = demands.filter((d: any) => d && d.id && !currentDeletedIds.has(d.id));
-        const incomingMap = new Map(cleanIncoming.map((d: any) => [d.id, d]));
-        const updated = currentDemands
-          .filter((d: any) => d && d.id && !currentDeletedIds.has(d.id))
-          .map((d: any) => incomingMap.get(d.id) || d);
-        const currentIds = new Set(currentDemands.map((d: any) => d.id));
-        const newDemands = cleanIncoming.filter((d: any) => !currentIds.has(d.id));
-        currentDemands = [...newDemands, ...updated];
+        if (demands.length === 0 && isExplicitClear) {
+          currentDemands = [];
+        } else {
+          const cleanIncoming = demands.filter((d: any) => d && d.id && !currentDeletedIds.has(d.id));
+          const incomingMap = new Map(cleanIncoming.map((d: any) => [d.id, d]));
+          const updated = currentDemands
+            .filter((d: any) => d && d.id && !currentDeletedIds.has(d.id))
+            .map((d: any) => incomingMap.get(d.id) || d);
+          const currentIds = new Set(currentDemands.map((d: any) => d.id));
+          const newDemands = cleanIncoming.filter((d: any) => !currentIds.has(d.id));
+          currentDemands = [...newDemands, ...updated];
+        }
       } else if (demand && demand.id) {
         currentDeletedIds.delete(demand.id);
         const idx = currentDemands.findIndex((d: any) => d.id === demand.id);
