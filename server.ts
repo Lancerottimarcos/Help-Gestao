@@ -566,10 +566,16 @@ async function startServer() {
       } else if (localList.length > 0 && remoteList.length === 0) {
         merged[col] = localList;
       } else if (localList.length > 0 && remoteList.length > 0) {
-        // Merge por ID preservando todos os registros sem exclusão acidental
-        const remoteMap = new Map(remoteList.map((item: any) => [item.id, item]));
-        const localOnly = localList.filter((item: any) => !remoteMap.has(item.id));
-        merged[col] = [...remoteList, ...localOnly];
+        // Merge por ID preservando todos os registros sem exclusão acidental ou downgrade
+        const localMap = new Map(localList.map((item: any) => [item.id, item]));
+        const mergedItems = remoteList.map((remoteItem: any) => {
+          const localItem = localMap.get(remoteItem.id);
+          if (!localItem) return remoteItem;
+          return { ...remoteItem, ...localItem };
+        });
+        const remoteIds = new Set(remoteList.map((item: any) => item.id));
+        const localOnly = localList.filter((item: any) => !remoteIds.has(item.id));
+        merged[col] = [...mergedItems, ...localOnly];
       } else {
         merged[col] = [];
       }
@@ -783,17 +789,23 @@ async function startServer() {
             ...(Array.isArray(sanitizedUpdate.deletedDemandIds) ? sanitizedUpdate.deletedDemandIds : []),
           ]);
 
+          // Assegura que demandas ativas enviadas não sejam filtradas por engano
+          sanitizedUpdate.demands.forEach((d: any) => {
+            if (d && d.id && (!Array.isArray(sanitizedUpdate.deletedDemandIds) || !sanitizedUpdate.deletedDemandIds.includes(d.id))) {
+              deletedIds.delete(d.id);
+            }
+          });
+          sanitizedUpdate.deletedDemandIds = Array.from(deletedIds);
+
           const currentDemands = (Array.isArray(currentData.demands) ? currentData.demands : [])
             .filter((d: any) => d && d.id && !deletedIds.has(d.id));
           const incomingDemands = sanitizedUpdate.demands
             .filter((d: any) => d && d.id && !deletedIds.has(d.id));
 
-          const incomingMap = new Map(incomingDemands.map((d: any) => [d.id, d]));
-          const updatedCurrent = currentDemands.map((d: any) => incomingMap.get(d.id) || d);
-          const currentIds = new Set(currentDemands.map((d: any) => d.id));
-          const brandNew = incomingDemands.filter((d: any) => !currentIds.has(d.id));
+          const incomingIds = new Set(incomingDemands.map((d: any) => d.id));
+          const missingCurrent = currentDemands.filter((d: any) => d && d.id && !incomingIds.has(d.id) && !deletedIds.has(d.id));
 
-          sanitizedUpdate.demands = [...brandNew, ...updatedCurrent];
+          sanitizedUpdate.demands = [...incomingDemands, ...missingCurrent];
         }
       }
 
@@ -973,14 +985,16 @@ async function startServer() {
         if (demands.length === 0 && isExplicitClear) {
           currentDemands = [];
         } else {
+          // Assegura que as demandas ativas sendo gravadas não sejam descartadas por IDs deletados antigos
+          demands.forEach((d: any) => {
+            if (d && d.id && (!Array.isArray(deletedDemandIds) || !deletedDemandIds.includes(d.id))) {
+              currentDeletedIds.delete(d.id);
+            }
+          });
           const cleanIncoming = demands.filter((d: any) => d && d.id && !currentDeletedIds.has(d.id));
-          const incomingMap = new Map(cleanIncoming.map((d: any) => [d.id, d]));
-          const updated = currentDemands
-            .filter((d: any) => d && d.id && !currentDeletedIds.has(d.id))
-            .map((d: any) => incomingMap.get(d.id) || d);
-          const currentIds = new Set(currentDemands.map((d: any) => d.id));
-          const newDemands = cleanIncoming.filter((d: any) => !currentIds.has(d.id));
-          currentDemands = [...newDemands, ...updated];
+          const incomingIds = new Set(cleanIncoming.map((d: any) => d.id));
+          const missingCurrent = currentDemands.filter((d: any) => d && d.id && !incomingIds.has(d.id) && !currentDeletedIds.has(d.id));
+          currentDemands = [...cleanIncoming, ...missingCurrent];
         }
       } else if (demand && demand.id) {
         currentDeletedIds.delete(demand.id);

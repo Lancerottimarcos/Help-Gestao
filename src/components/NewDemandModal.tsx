@@ -108,7 +108,7 @@ export const NewDemandModal: React.FC<NewDemandModalProps> = ({
     );
     const resolvedClientName = matchingClient ? (matchingClient.name || matchingClient.companyName || selectedClient) : selectedClient;
 
-    const uniqueNum = `${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
+    const uniqueNum = `${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
     const newDemand: DemandItem = {
       id: `DEM-${uniqueNum}`,
       title: sanitizedTitle,
@@ -128,7 +128,7 @@ export const NewDemandModal: React.FC<NewDemandModalProps> = ({
       },
       statusLabel: columnId === 'ideias' ? 'Briefing Inicial' : columnId === 'aprovacao' ? 'Aguardando Cliente' : 'Em Produção',
       approvalStatus: columnId === 'aprovacao' ? 'pendente' : undefined,
-      clientPortalToken: columnId === 'aprovacao' ? `dem-${uniqueNum}` : undefined,
+      clientPortalToken: columnId === 'aprovacao' ? `dem-${Date.now().toString(36)}` : undefined,
       whatsappNotified: false,
       checklistTotal: 4,
       checklistCompleted: 0,

@@ -408,6 +408,17 @@ export const serverDbService = {
     try {
       const firestoreData = await fetchFirestoreData('agency_data', 'main_state');
       if (firestoreData && typeof firestoreData === 'object' && Object.keys(firestoreData).length > 0) {
+        if (!Array.isArray(firestoreData.demands) || firestoreData.demands.length === 0) {
+          try {
+            const localSaved = localStorage.getItem('agency_demands');
+            if (localSaved) {
+              const parsed = JSON.parse(localSaved);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                firestoreData.demands = parsed;
+              }
+            }
+          } catch {}
+        }
         return firestoreData as AppDatabasePayload;
       }
     } catch (err) {
@@ -438,9 +449,6 @@ export const serverDbService = {
    * Protege contra concorrência e condições de corrida entre demandas e clientes.
    */
   saveDatabase(payload: Partial<AppDatabasePayload>, immediate = false): Promise<boolean> {
-    if (Array.isArray(payload.demands) && payload.demands.length > 0) {
-      this.saveDemandsDirectly(payload.demands).catch(() => {});
-    }
     if (Array.isArray(payload.teamMembers) && payload.teamMembers.length > 0) {
       this.saveTeamMembersDirectly(payload.teamMembers).catch(() => {});
     }

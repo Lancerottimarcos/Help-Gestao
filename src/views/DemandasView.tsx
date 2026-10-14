@@ -66,6 +66,7 @@ interface DemandasViewProps {
     targetDemandId?: string,
     position?: 'before' | 'after'
   ) => void;
+  onReorderColumnDemands?: (columnId: KanbanColumnId, newDemands: DemandItem[]) => void;
   onOpenNewDemandModal: () => void;
   onSaveDemand?: (demand: DemandItem) => void;
   onDeleteDemand?: (demandId: string) => void;
@@ -89,6 +90,7 @@ export const DemandasView: React.FC<DemandasViewProps> = ({
   filterResetTrigger,
   onUpdateDemandColumn,
   onMoveDemand,
+  onReorderColumnDemands,
   onOpenNewDemandModal,
   onSaveDemand,
   onDeleteDemand,
@@ -1535,6 +1537,7 @@ export const DemandasView: React.FC<DemandasViewProps> = ({
                   onCardDragOver={handleCardDragOver}
                   onCardDrop={handleCardDrop}
                   onUpdateDemandColumn={onUpdateDemandColumn}
+                  onReorderColumnDemands={onReorderColumnDemands}
                   getPriorityBadgeStyle={getPriorityBadgeStyle}
                   getPriorityColorBars={getPriorityColorBars}
                   getAssigneeDisplay={getAssigneeDisplay}

@@ -79,46 +79,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Clean Launch Reset Handler: garante que clientes, demandas e serviços antigos sejam removidos para o lançamento
-  useEffect(() => {
-    try {
-      const CLEAN_KEY = 'agency_clean_launch_pronto_lancamento_v1';
-      if (typeof window !== 'undefined' && localStorage.getItem(CLEAN_KEY) !== 'true') {
-        localStorage.removeItem('agency_demands');
-        localStorage.removeItem('agency_clients');
-        localStorage.removeItem('agency_services');
-        localStorage.removeItem('agency_proposals');
-        localStorage.removeItem('agency_invoices');
-        localStorage.removeItem('agency_recent_activities');
-        localStorage.removeItem('agency_deleted_demand_ids');
-        localStorage.removeItem('agency_deleted_client_ids');
-        localStorage.removeItem('agency_deleted_service_ids');
-        localStorage.removeItem('agency_demands_v2');
-        localStorage.setItem('agency_demands', JSON.stringify([]));
-        localStorage.setItem('agency_clients', JSON.stringify([]));
-        localStorage.setItem('agency_services', JSON.stringify([]));
-        localStorage.setItem('agency_proposals', JSON.stringify([]));
-        localStorage.setItem('agency_invoices', JSON.stringify([]));
-        localStorage.setItem('agency_recent_activities', JSON.stringify([]));
-        localStorage.setItem(CLEAN_KEY, 'true');
-        setDemands([]);
-        setClients([]);
-        setServices([]);
-        setProposals([]);
-        setInvoices([]);
-        setActivities([]);
-        fetch('/api/clean-launch', { method: 'POST' }).catch(() => {});
-      }
-    } catch {}
-  }, []);
-
   // Main state data with local persistence for production readiness
   const [demands, setDemands] = useState<DemandItem[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
-          return [];
-        }
         const saved = localStorage.getItem('agency_demands');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -132,9 +96,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [clients, setClients] = useState<Client[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
-          return [];
-        }
         const saved = localStorage.getItem('agency_clients');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -150,9 +111,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [services, setServices] = useState<Service[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
-          return [];
-        }
         const saved = localStorage.getItem('agency_services');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -166,9 +124,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [proposals, setProposals] = useState<BudgetProposal[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
-          return [];
-        }
         const saved = localStorage.getItem('agency_proposals');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -182,9 +137,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
     try {
       if (typeof window !== 'undefined') {
-        if (localStorage.getItem('agency_clean_launch_pronto_lancamento_v1') !== 'true') {
-          return [];
-        }
         const saved = localStorage.getItem('agency_invoices');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -348,6 +300,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const isServerDbLoadedRef = useRef(false);
   const lastLocalDemandUpdateRef = useRef<number>(0);
+  const recentLocalMovesRef = useRef<Map<string, { columnId: KanbanColumnId; updatedAt: number }>>(new Map());
   const lastLocalTeamMemberUpdateRef = useRef<number>(0);
   const lastLocalColumnUpdateRef = useRef<number>(0);
 
@@ -769,13 +722,19 @@ export function Layout({ children, onLogout }: LayoutProps) {
         }
 
         if (remoteData.demands && Array.isArray(remoteData.demands)) {
+          const deletedDemandIds = getDeletedDemandIds();
           if (remoteDemandsList.length === 0) {
             setDemands((prev) => {
-              const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 30000);
-              if (isRecentlyEditedLocally && prev.length > 0) return prev;
-              try {
-                localStorage.setItem('agency_demands', JSON.stringify([]));
-              } catch {}
+              const cleanPrev = prev.filter((d) => !deletedDemandIds.has(d.id));
+              if (cleanPrev.length > 0) {
+                // Preserva demandas criadas localmente e re-sincroniza com o servidor central
+                serverDbService.saveDatabase({ demands: cleanPrev }, true);
+                serverDbService.saveDemandsDirectly(cleanPrev);
+                try {
+                  localStorage.setItem('agency_demands', JSON.stringify(cleanPrev));
+                } catch {}
+                return cleanPrev;
+              }
               return [];
             });
           } else {
@@ -788,7 +747,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
               const localPending = cleanPrev.filter((d) => !remoteMap.has(d.id));
 
               // Preserva alterações locais recentes feitas há menos de 30 segundos
-              const isRecentlyEditedLocally = _isSilent && (Date.now() - lastLocalDemandUpdateRef.current < 30000);
+              const isRecentlyEditedLocally = (Date.now() - lastLocalDemandUpdateRef.current < 30000);
               if (isRecentlyEditedLocally) {
                 return prev;
               }
@@ -796,6 +755,9 @@ export function Layout({ children, onLogout }: LayoutProps) {
               const merged = cleanRemote.map((rem) => {
                 const loc = cleanPrev.find((p) => p.id === rem.id);
                 if (!loc) return rem;
+
+                const recentMove = recentLocalMovesRef.current.get(rem.id);
+                const isRecent = recentMove && (Date.now() - recentMove.updatedAt < 60000);
 
                 // Se o servidor tem atualização de decisão/ajuste do cliente, prioriza os dados do servidor
                 const hasRemoteClientAction =
@@ -808,7 +770,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
                   return {
                     ...loc,
                     ...rem,
-                    columnId: rem.columnId || loc.columnId,
+                    columnId: isRecent ? recentMove.columnId : (rem.columnId || loc.columnId),
                     approvalStatus: rem.approvalStatus,
                     approvalFeedback: rem.approvalFeedback,
                     lastApprovalFeedback: rem.lastApprovalFeedback || loc.lastApprovalFeedback,
@@ -818,7 +780,9 @@ export function Layout({ children, onLogout }: LayoutProps) {
                   };
                 }
 
-                return { ...loc, ...rem };
+                // Preserva o columnId local caso tenha sido movido ou alterado localmente
+                const targetCol = isRecent ? recentMove.columnId : (loc.columnId || rem.columnId);
+                return { ...rem, ...loc, columnId: targetCol };
               });
 
               // Adiciona as demandas cadastradas localmente pendentes de sincronização
@@ -1070,7 +1034,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
           const deletedDemandIds = getDeletedDemandIds();
           const cleanLocalDemands = localDemands.filter((d) => !deletedDemandIds.has(d.id));
           let remoteDemandsList = (remoteData.demands && Array.isArray(remoteData.demands)) ? remoteData.demands : [];
-          if (remoteDemandsList.length === 0 && (!remoteData || !Array.isArray(remoteData.demands))) {
+          if (remoteDemandsList.length === 0) {
             try {
               const directDemands = await serverDbService.fetchDemandsDirectly();
               if (Array.isArray(directDemands) && directDemands.length > 0) {
@@ -1079,17 +1043,12 @@ export function Layout({ children, onLogout }: LayoutProps) {
             } catch {}
           }
 
-          if (Array.isArray(remoteData.demands) && remoteData.demands.length === 0) {
-            setDemands([]);
-            try {
-              localStorage.setItem('agency_demands', JSON.stringify([]));
-            } catch {}
-          } else if (remoteDemandsList.length > 0) {
-            const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
-            const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
-            const localPending = cleanLocalDemands.filter((d) => !remoteMap.has(d.id));
-            const merged = [...cleanRemote, ...localPending];
+          const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
+          const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
+          const localPending = cleanLocalDemands.filter((d) => !remoteMap.has(d.id));
+          const merged = [...cleanRemote, ...localPending];
 
+          if (merged.length > 0) {
             setDemands(merged);
             try {
               localStorage.setItem('agency_demands', JSON.stringify(merged));
@@ -1098,6 +1057,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
               needsServerPush = true;
               pushPayload.demands = merged;
             }
+          } else {
+            setDemands([]);
+            try {
+              localStorage.setItem('agency_demands', JSON.stringify([]));
+            } catch {}
           }
 
           // 3. EQUIPE (TEAM MEMBERS)
@@ -1272,8 +1236,34 @@ export function Layout({ children, onLogout }: LayoutProps) {
             setDemands((prev) => {
               const prevClean = prev.filter((d) => !deletedIds.has(d.id));
               const remoteMap = new Map(cleanIncoming.map((d: DemandItem) => [d.id, d]));
-              const localPending = prevClean.filter((d) => !remoteMap.has(d.id));
-              const merged = [...cleanIncoming, ...localPending];
+
+              const merged = cleanIncoming.map((remoteItem: DemandItem) => {
+                const localItem = prevClean.find((p) => p.id === remoteItem.id);
+                const recentMove = recentLocalMovesRef.current.get(remoteItem.id);
+                if (recentMove && (Date.now() - recentMove.updatedAt < 60000)) {
+                  return {
+                    ...remoteItem,
+                    ...(localItem || {}),
+                    columnId: recentMove.columnId,
+                  };
+                }
+                if (localItem && localItem.columnId !== remoteItem.columnId && (Date.now() - lastLocalDemandUpdateRef.current < 25000)) {
+                  return {
+                    ...remoteItem,
+                    ...localItem,
+                    columnId: localItem.columnId,
+                  };
+                }
+                return remoteItem;
+              });
+
+              // Preserva demandas criadas localmente que o servidor ainda não tem
+              prevClean.forEach((loc) => {
+                if (!remoteMap.has(loc.id) && !merged.some((m) => m.id === loc.id)) {
+                  merged.push(loc);
+                }
+              });
+
               try {
                 localStorage.setItem('agency_demands', JSON.stringify(merged));
               } catch {}
@@ -1307,7 +1297,46 @@ export function Layout({ children, onLogout }: LayoutProps) {
                 return merged;
               });
             }
-            syncWithServerDb(true);
+            if (msg.demands && Array.isArray(msg.demands)) {
+              const deletedIds = getDeletedDemandIds();
+              const cleanIncoming = msg.demands.filter((d: DemandItem) => !deletedIds.has(d.id));
+              setDemands((prev) => {
+                const prevClean = prev.filter((d) => !deletedIds.has(d.id));
+                const remoteMap = new Map(cleanIncoming.map((d: DemandItem) => [d.id, d]));
+                const merged = cleanIncoming.map((remoteItem: DemandItem) => {
+                  const localItem = prevClean.find((p) => p.id === remoteItem.id);
+                  const recentMove = recentLocalMovesRef.current.get(remoteItem.id);
+                  if (recentMove && (Date.now() - recentMove.updatedAt < 60000)) {
+                    return {
+                      ...remoteItem,
+                      ...(localItem || {}),
+                      columnId: recentMove.columnId,
+                    };
+                  }
+                  if (localItem && localItem.columnId !== remoteItem.columnId && (Date.now() - lastLocalDemandUpdateRef.current < 25000)) {
+                    return {
+                      ...remoteItem,
+                      ...localItem,
+                      columnId: localItem.columnId,
+                    };
+                  }
+                  return remoteItem;
+                });
+                prevClean.forEach((loc) => {
+                  if (!remoteMap.has(loc.id) && !merged.some((m) => m.id === loc.id)) {
+                    merged.push(loc);
+                  }
+                });
+                try {
+                  localStorage.setItem('agency_demands', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
+            // Só dispara sincronização de banco se não houver edição local recente nos últimos 15s
+            if (Date.now() - lastLocalDemandUpdateRef.current > 15000) {
+              syncWithServerDb(true);
+            }
           }
         } catch {}
       };
@@ -1316,7 +1345,9 @@ export function Layout({ children, onLogout }: LayoutProps) {
     // Sincroniza imediatamente quando a janela / aba do navegador ganha foco (ao alternar entre abas ou celulares)
     const handleFocus = () => {
       handleSyncWithSupabase(true);
-      syncWithServerDb(true);
+      if (Date.now() - lastLocalDemandUpdateRef.current > 15000) {
+        syncWithServerDb(true);
+      }
     };
     window.addEventListener('focus', handleFocus);
     window.addEventListener('visibilitychange', handleFocus);
@@ -1340,7 +1371,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_clients', JSON.stringify(clients));
       } catch {}
-      if (isServerDbLoadedRef.current) {
+      if (isServerDbLoadedRef.current && (Date.now() - lastLocalDemandUpdateRef.current > 5000)) {
         serverDbService.saveDatabase({ clients });
       }
     }
@@ -1628,149 +1659,194 @@ export function Layout({ children, onLogout }: LayoutProps) {
     targetDemandId?: string,
     position: 'before' | 'after' = 'after'
   ) => {
-    const demand = demands.find((d) => d.id === demandId);
-    if (!demand) return;
+    // 1. Optimistic UI Check: Validação e bloqueio contra chamadas inválidas
+    if (!demandId || !targetColumn) return;
 
-    const isTargetApproval = isAprovacaoClienteColumn(targetColumn, kanbanColumns);
-    const wasApproval = isAprovacaoClienteColumn(demand.columnId, kanbanColumns);
-    const isMovingToApproval = isTargetApproval && (!wasApproval || demand.approvalStatus === 'alteracao_solicitada');
-    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Registra imediatamente o timestamp e a coluna de destino em recentLocalMovesRef para blindar contra race conditions com WebSocket
+    const moveTimestamp = Date.now();
+    lastLocalDemandUpdateRef.current = moveTimestamp;
+    recentLocalMovesRef.current.set(demandId, { columnId: targetColumn, updatedAt: moveTimestamp });
 
-    const updatedDemand: DemandItem = {
-      ...demand,
-      columnId: targetColumn,
-      ...(isMovingToApproval
-        ? {
-            approvalStatus: 'pendente',
-            approvalSentAt: timeNow,
-            statusLabel: 'Aguardando Cliente',
-            clientPortalToken: demand.clientPortalToken || demand.id.toLowerCase(),
-            whatsappNotified: demand.whatsappNotified || false,
-            lastApprovalFeedback: demand.approvalFeedback || demand.lastApprovalFeedback,
-            approvalFeedback: undefined,
-            history: [
-              ...(demand.history || []),
-              {
-                id: `hist-${Date.now()}`,
-                text: `Demanda enviada para Aprovação do Cliente às ${timeNow}.`,
-                timestamp: timeNow,
-                author: currentUser.name || 'Agência',
-              },
-            ],
-          }
-        : {}),
-    };
+    let updatedResultList: DemandItem[] = [];
+    let updatedDemandItem: DemandItem | null = null;
+    let activityToPush: ClientActivity | null = null;
 
-    // Notificação de WhatsApp ao mover desabilitada temporariamente (implementação futura)
-    // if (isMovingToApproval) {
-    //   const config = getNotificationConfig();
-    //   if (config.autoOpenModalOnMove) {
-    //     setWhatsAppDemand(updatedDemand);
-    //   }
-    // }
+    // 2. Aplicação OTIMISTA síncrona imediata da nova ordenação e coluna utilizando updater funcional
+    setDemands((prevDemands) => {
+      const currentDemand = prevDemands.find((d) => d.id === demandId);
+      if (!currentDemand) {
+        console.warn(`[Kanban Optimistic UI] Demanda com id "${demandId}" não localizada.`);
+        return prevDemands;
+      }
 
-    if (demand.columnId !== targetColumn) {
-      const columnLabels: Record<KanbanColumnId, string> = {
-        ideias: 'Ideias',
-        producao: 'Em Produção',
-        aprovacao: 'Aprovação',
-        agendamento: 'Agendamento',
-        concluidas: 'Concluída',
+      // Se já estiver na mesma coluna e sem alteração de posição relativa entre cards, ignora
+      if (currentDemand.columnId === targetColumn && (!targetDemandId || targetDemandId === demandId)) {
+        return prevDemands;
+      }
+
+      const isTargetApproval = isAprovacaoClienteColumn(targetColumn, kanbanColumns);
+      const wasApproval = isAprovacaoClienteColumn(currentDemand.columnId, kanbanColumns);
+      const isMovingToApproval = isTargetApproval && (!wasApproval || currentDemand.approvalStatus === 'alteracao_solicitada');
+      const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const updatedDemand: DemandItem = {
+        ...currentDemand,
+        columnId: targetColumn,
+        ...(isMovingToApproval
+          ? {
+              approvalStatus: 'pendente',
+              approvalSentAt: timeNow,
+              statusLabel: 'Aguardando Cliente',
+              clientPortalToken: currentDemand.clientPortalToken || currentDemand.id.toLowerCase(),
+              whatsappNotified: currentDemand.whatsappNotified || false,
+              lastApprovalFeedback: currentDemand.approvalFeedback || currentDemand.lastApprovalFeedback,
+              approvalFeedback: undefined,
+              history: [
+                ...(currentDemand.history || []),
+                {
+                  id: `hist-${Date.now()}`,
+                  text: `Demanda enviada para Aprovação do Cliente às ${timeNow}.`,
+                  timestamp: timeNow,
+                  author: currentUser.name || 'Agência',
+                },
+              ],
+            }
+          : {}),
       };
-      const label = columnLabels[targetColumn] || targetColumn;
-      const isApproved = targetColumn === 'aprovacao' || targetColumn === 'agendamento';
-      const newActivity: ClientActivity = {
-        id: `act-${Date.now()}`,
-        clientName: demand.client,
-        demandId: demand.id,
-        demandTitle: demand.title,
-        projectOrCampaign: demand.clientProject,
-        type: targetColumn === 'aprovacao' ? 'client_approval' : 'status_changed',
-        description: isMovingToApproval
-          ? `Demanda enviada para a etapa de Aprovação.`
-          : `Demanda avançou para a etapa de "${label}".`,
-        actor: {
-          name: currentUser.name,
-          avatar: currentUser.avatarUrl,
-          role: currentUser.roleLabel,
-        },
-        timestamp: 'Agora mesmo',
-        relativeTime: 'Agora mesmo',
-        badge: {
-          label: isMovingToApproval ? 'Enviado p/ Aprovação' : `Status: ${label}`,
-          bgClass: isApproved ? 'bg-emerald-50' : 'bg-blue-50',
-          textClass: isApproved ? 'text-emerald-700' : 'text-blue-700',
-          borderClass: isApproved ? 'border-emerald-200' : 'border-blue-200',
-        },
-      };
-      setActivities((prev) => [newActivity, ...prev]);
-    }
 
-    let nextDemands: DemandItem[] = [];
-    setDemands((prev) => {
-      // Remove the dragged/moved item
-      const withoutItem = prev.filter((d) => d.id !== demandId);
+      updatedDemandItem = updatedDemand;
+
+      if (currentDemand.columnId !== targetColumn) {
+        const columnLabels: Record<KanbanColumnId, string> = {
+          ideias: 'Ideias',
+          producao: 'Em Produção',
+          aprovacao: 'Aprovação',
+          agendamento: 'Agendamento',
+          concluidas: 'Concluída',
+        };
+        const label = columnLabels[targetColumn] || targetColumn;
+        const isApproved = targetColumn === 'aprovacao' || targetColumn === 'agendamento';
+        activityToPush = {
+          id: `act-${Date.now()}`,
+          clientName: currentDemand.client,
+          demandId: currentDemand.id,
+          demandTitle: currentDemand.title,
+          projectOrCampaign: currentDemand.clientProject,
+          type: targetColumn === 'aprovacao' ? 'client_approval' : 'status_changed',
+          description: isMovingToApproval
+            ? `Demanda enviada para a etapa de Aprovação.`
+            : `Demanda avançou para a etapa de "${label}".`,
+          actor: {
+            name: currentUser.name,
+            avatar: currentUser.avatarUrl,
+            role: currentUser.roleLabel,
+          },
+          timestamp: 'Agora mesmo',
+          relativeTime: 'Agora mesmo',
+          badge: {
+            label: isMovingToApproval ? 'Enviado p/ Aprovação' : `Status: ${label}`,
+            bgClass: isApproved ? 'bg-emerald-50' : 'bg-blue-50',
+            textClass: isApproved ? 'text-emerald-700' : 'text-blue-700',
+            borderClass: isApproved ? 'border-emerald-200' : 'border-blue-200',
+          },
+        };
+      }
+
+      const withoutItem = prevDemands.filter((d) => d.id !== demandId);
+      let result: DemandItem[];
 
       if (targetDemandId && targetDemandId !== demandId) {
         const targetIndex = withoutItem.findIndex((d) => d.id === targetDemandId);
         if (targetIndex !== -1) {
           const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-          const result = [...withoutItem];
+          result = [...withoutItem];
           result.splice(insertIndex, 0, updatedDemand);
-          nextDemands = result;
-          try {
-            localStorage.setItem('agency_demands', JSON.stringify(result));
-          } catch {}
-          serverDbService.saveDatabase({ demands: result }, true);
-          serverDbService.saveDemandsDirectly(result);
-          return result;
+        } else {
+          result = [...withoutItem, updatedDemand];
         }
-      }
-
-      // If no targetDemandId, find the last item of targetColumn to append after it
-      let lastColIndex = -1;
-      for (let i = withoutItem.length - 1; i >= 0; i--) {
-        if (withoutItem[i].columnId === targetColumn) {
-          lastColIndex = i;
-          break;
-        }
-      }
-
-      let result: DemandItem[];
-      if (lastColIndex !== -1) {
-        result = [...withoutItem];
-        result.splice(lastColIndex + 1, 0, updatedDemand);
       } else {
-        result = [...withoutItem, updatedDemand];
+        // Se não houver targetDemandId, anexa após o último item da coluna de destino
+        let lastColIndex = -1;
+        for (let i = withoutItem.length - 1; i >= 0; i--) {
+          if (withoutItem[i].columnId === targetColumn) {
+            lastColIndex = i;
+            break;
+          }
+        }
+        if (lastColIndex !== -1) {
+          result = [...withoutItem];
+          result.splice(lastColIndex + 1, 0, updatedDemand);
+        } else {
+          result = [...withoutItem, updatedDemand];
+        }
       }
-      nextDemands = result;
+
+      updatedResultList = result;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(result));
       } catch {}
-      serverDbService.saveDatabase({ demands: result }, true);
-      serverDbService.saveDemandsDirectly(result);
+
       return result;
     });
 
-    // Atualiza contagem de demandas ativas nos clientes
+    if (activityToPush) {
+      setActivities((prev) => [activityToPush!, ...prev]);
+    }
+
+    if (!updatedResultList || updatedResultList.length === 0) return;
+
+    // 3. Atualização otimista sincronizada na contagem de demandas ativas dos clientes
+    let nextClientsList: Client[] = [];
     setClients((prevClients) => {
       const updatedClients = prevClients.map((c) => {
-        const count = nextDemands.filter((d) => {
+        const count = updatedResultList.filter((d) => {
           return (d.clientId === c.id || d.client.toLowerCase() === c.name.toLowerCase()) && d.columnId !== 'concluidas';
         }).length;
         return { ...c, activeDemandsCount: count };
       });
+      nextClientsList = updatedClients;
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients, demands: nextDemands });
       return updatedClients;
     });
 
-    lastLocalDemandUpdateRef.current = Date.now();
+    // 4. Persistência atômica e unificada no servidor central (salva demandas e clientes juntos em um único payload)
+    serverDbService
+      .saveDatabase({ demands: updatedResultList, clients: nextClientsList.length > 0 ? nextClientsList : undefined }, true)
+      .catch((err) => {
+        console.warn(`[Kanban Optimistic UI] Aviso ao persistir demanda "${demandId}":`, err);
+      });
+    serverDbService.saveDemandsDirectly(updatedResultList).catch(() => {});
 
-    // Sincroniza em background com o Supabase PostgreSQL
-    supabaseService.upsertDemand(updatedDemand);
+    // Sincroniza em background com o Supabase PostgreSQL se configurado
+    if (supabaseService.isConfigured() && updatedDemandItem) {
+      supabaseService.upsertDemand(updatedDemandItem);
+    }
+  };
+
+  const handleReorderColumnDemands = (columnId: KanbanColumnId, newColDemands: DemandItem[]) => {
+    if (!newColDemands || newColDemands.length === 0) return;
+    const moveTimestamp = Date.now();
+    lastLocalDemandUpdateRef.current = moveTimestamp;
+
+    // Registra todas as demandas reordenadas em recentLocalMovesRef para evitar race conditions
+    newColDemands.forEach((d) => {
+      recentLocalMovesRef.current.set(d.id, { columnId, updatedAt: moveTimestamp });
+    });
+
+    let finalDemands: DemandItem[] = [];
+    setDemands((prevDemands) => {
+      const otherDemands = prevDemands.filter((d) => d.columnId !== columnId);
+      finalDemands = [...newColDemands, ...otherDemands];
+      try {
+        localStorage.setItem('agency_demands', JSON.stringify(finalDemands));
+      } catch {}
+      return finalDemands;
+    });
+
+    serverDbService.saveDatabase({ demands: finalDemands }, true).catch(() => {});
+    serverDbService.saveDemandsDirectly(finalDemands).catch(() => {});
   };
 
   const handleUpdateDemandColumn = (demandId: string, newColumn: KanbanColumnId) => {
@@ -1779,7 +1855,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const handleAddDemand = (newDemand: DemandItem) => {
     removeDeletedDemandId(newDemand.id);
+    setSelectedClientForKanban('todos');
+    setKanbanFilterTrigger((prev) => prev + 1);
     lastLocalDemandUpdateRef.current = Date.now();
+    recentLocalMovesRef.current.set(newDemand.id, { columnId: newDemand.columnId, updatedAt: Date.now() });
 
     let nextDemands: DemandItem[] = [];
     setDemands((prev) => {
@@ -1888,6 +1967,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
     };
 
     lastLocalDemandUpdateRef.current = Date.now();
+    recentLocalMovesRef.current.set(finalDemand.id, { columnId: finalDemand.columnId, updatedAt: Date.now() });
 
     let updatedDemandsList: DemandItem[] = [];
     setDemands((prev) => {
@@ -2164,6 +2244,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   const handleDeleteDemand = (demandId: string) => {
     addDeletedDemandId(demandId);
     lastLocalDemandUpdateRef.current = Date.now();
+    recentLocalMovesRef.current.delete(demandId);
     let remainingDemands: DemandItem[] = [];
     setDemands((prev) => {
       const updated = prev.filter((item) => item.id !== demandId);
@@ -2614,6 +2695,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
             onClearInitialSelectedDemand={() => setSelectedDemandIdForKanban(null)}
             onUpdateDemandColumn={handleUpdateDemandColumn}
             onMoveDemand={handleMoveDemand}
+            onReorderColumnDemands={handleReorderColumnDemands}
             onOpenNewDemandModal={() => setIsNewDemandModalOpen(true)}
             onSaveDemand={handleSaveDemand}
             onDeleteDemand={handleDeleteDemand}

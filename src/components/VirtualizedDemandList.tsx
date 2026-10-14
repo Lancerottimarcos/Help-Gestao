@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { List } from 'react-window';
-import { motion, AnimatePresence } from 'motion/react';
+import { Reorder, motion, AnimatePresence } from 'framer-motion';
 import { 
   Paperclip, 
   Calendar as CalendarIcon, 
@@ -31,6 +31,7 @@ export interface VirtualizedDemandListProps {
   onCardDragOver: (e: React.DragEvent<HTMLDivElement>, demand: DemandItem, columnId: KanbanColumnId) => void;
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, demand: DemandItem, columnId: KanbanColumnId) => void;
   onUpdateDemandColumn: (id: string, newColId: KanbanColumnId) => void;
+  onReorderColumnDemands?: (columnId: KanbanColumnId, newDemands: DemandItem[]) => void;
   getPriorityBadgeStyle: (priority: Priority) => { label: string; classes: string };
   getPriorityColorBars: (priority?: Priority, barsCount?: number) => React.ReactNode;
   getAssigneeDisplay: (assignee?: { name?: string; avatar?: string }) => { name: string; avatar?: string };
@@ -134,35 +135,181 @@ const DemandCard: React.FC<{
   const hasNextCol = currentColIdx !== -1 && currentColIdx < activeColumns.length - 1;
   const nextCol = hasNextCol ? activeColumns[currentColIdx + 1] : null;
 
+  if (isVirtualized) {
+    return (
+      <div className="relative py-1">
+        {/* Visual Drop Target Indicator - Before */}
+        {isTargetBefore && (
+          <div 
+            className="h-1.5 bg-[#fab518] rounded-full shadow-xs mx-1 mb-1.5 animate-pulse transition-all"
+            aria-label="Posicionar aqui"
+          />
+        )}
+        <div
+          id={`demand-card-${demand.id}`}
+          draggable
+          onDragStart={(e) => onDragStart(e, demand.id)}
+          onDragEnd={onDragEnd}
+          onDragOver={(e) => onCardDragOver(e, demand, col.id)}
+          onDrop={(e) => onCardDrop(e, demand, col.id)}
+          onClick={() => onCardClick(demand)}
+          className={`
+            bg-white dark:bg-[#0f172a] rounded-[18px] p-3.5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-md 
+            hover:border-[#fab518]/80 dark:hover:border-[#fab518]/80 hover:-translate-y-0.5 transition-all duration-150 group relative cursor-pointer select-none
+            ${isDragging ? 'opacity-30 scale-95 border-dashed border-[#fab518] shadow-none cursor-grabbing' : ''}
+          `}
+        >
+          {/* Top Bar: Priority Bars + Demand ID + Attachments */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              {getPriorityColorBars(demand.priority, demand.priorityBars)}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {(demand.attachmentsCount || (demand.attachments && demand.attachments.length > 0)) && (
+                <span 
+                  className="flex items-center gap-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800 px-1.5 py-0.2 rounded"
+                  title={`${demand.attachmentsCount || demand.attachments?.length} anexo(s)`}
+                >
+                  <Paperclip size={10} />
+                  <span>{demand.attachmentsCount || demand.attachments?.length}</span>
+                </span>
+              )}
+              <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors">
+                {demand.id}
+              </span>
+            </div>
+          </div>
+
+          {/* Content Row: Thumbnail + Title + Client */}
+          <div className="flex items-start gap-2.5 mb-2.5">
+            {cardThumbnail && (
+              <img
+                src={cardThumbnail}
+                alt={demand.title}
+                className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200 dark:border-slate-700 pointer-events-none"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs sm:text-[13px] font-black text-[#142142] dark:text-white leading-snug line-clamp-2 group-hover:text-[#fab518] transition-colors">
+                {demand.title}
+              </h4>
+              {displayClient && (
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                  {displayClient}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Tags & Meta Row */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-2 text-[10px]">
+            <span className={`px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider ${pBadge.classes}`}>
+              {pBadge.label}
+            </span>
+            {demand.type && (
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-semibold truncate max-w-[110px]">
+                {demand.type}
+              </span>
+            )}
+            {demand.dueDate && (
+              <>
+                <span className="text-slate-300 dark:text-slate-600 font-bold">·</span>
+                <span 
+                  className={`inline-flex items-center gap-1 font-semibold text-[10px] sm:text-[11px] ${
+                    demand.dueDate.toLowerCase().includes('atrasad') || demand.dueDate.toLowerCase().includes('ontem')
+                      ? 'text-rose-600 dark:text-rose-400 font-bold'
+                      : demand.dueDate.toLowerCase().includes('hoje')
+                      ? 'text-amber-600 dark:text-amber-400 font-bold'
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                  title={`Data da demanda / Prazo: ${formatDemandDateFull(demand.dueDate)}`}
+                >
+                  <CalendarIcon size={11} className="shrink-0" />
+                  <span>{formatDemandDate(demand.dueDate)}</span>
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Bottom Card Footer: Assignee & Move Action */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {assigneeDisplay.avatar?.trim() ? (
+                <img
+                  src={assigneeDisplay.avatar}
+                  alt={assigneeDisplay.name}
+                  title={`Responsável: ${assigneeDisplay.name}`}
+                  className="w-5.5 h-5.5 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700 pointer-events-none shrink-0"
+                />
+              ) : (
+                <div 
+                  className="w-5.5 h-5.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300 pointer-events-none shrink-0"
+                  title={`Responsável: ${assigneeDisplay.name}`}
+                >
+                  {assigneeDisplay.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[100px]">
+                {assigneeDisplay.name}
+              </span>
+            </div>
+
+            {hasNextCol && nextCol && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateDemandColumn(demand.id, nextCol.id);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-[#142142] dark:text-white bg-slate-100 dark:bg-slate-800 hover:bg-[#fab518] hover:text-[#142142] dark:hover:bg-[#fab518] dark:hover:text-[#142142] transition-colors shrink-0 shadow-2xs"
+                title={`Mover para "${nextCol.title}"`}
+              >
+                <span>Avançar</span>
+                <ArrowRight size={10} className="stroke-[2.5]" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Visual Drop Target Indicator - After */}
+        {isTargetAfter && (
+          <div 
+            className="h-1.5 bg-[#fab518] rounded-full shadow-xs mx-1 mt-1.5 animate-pulse transition-all"
+            aria-label="Posicionar aqui"
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
-    <motion.div
-      layout={!isVirtualized ? 'position' : undefined}
-      layoutId={!isVirtualized ? `kanban-card-${demand.id}` : undefined}
-      initial={!isVirtualized ? { opacity: 0, scale: 0.95, y: 8 } : undefined}
-      animate={
-        !isVirtualized
-          ? {
-              opacity: isDragging ? 0.35 : 1,
-              scale: isDragging ? 0.96 : 1,
-              y: 0,
-            }
-          : undefined
-      }
-      exit={
-        !isVirtualized
-          ? { opacity: 0, scale: 0.92, transition: { duration: 0.15 } }
-          : undefined
-      }
+    <Reorder.Item
+      as="div"
+      value={demand}
+      key={demand.id}
+      id={`kanban-card-${demand.id}`}
+      dragListener={false}
+      layout
+      layoutId={`kanban-card-${demand.id}`}
+      initial={{ opacity: 0, scale: 0.96, y: 8 }}
+      animate={{
+        opacity: isDragging ? 0.35 : 1,
+        scale: isDragging ? 0.98 : 1,
+        y: 0,
+      }}
+      exit={{ opacity: 0, scale: 0.92, transition: { duration: 0.15 } }}
       transition={{
         layout: {
           type: 'spring',
-          stiffness: 350,
-          damping: 28,
+          stiffness: 420,
+          damping: 32,
+          mass: 0.8,
         },
         opacity: { duration: 0.2 },
         scale: { duration: 0.2 },
       }}
-      className="relative"
+      className="relative list-none select-none focus:outline-none"
     >
       {/* Visual Drop Target Indicator - Before */}
       {isTargetBefore && (
@@ -357,7 +504,7 @@ const DemandCard: React.FC<{
           aria-label="Posicionar aqui"
         />
       )}
-    </motion.div>
+    </Reorder.Item>
   );
 };
 
@@ -424,6 +571,7 @@ export const VirtualizedDemandList: React.FC<VirtualizedDemandListProps> = ({
   onCardDragOver,
   onCardDrop,
   onUpdateDemandColumn,
+  onReorderColumnDemands,
   getPriorityBadgeStyle,
   getPriorityColorBars,
   getAssigneeDisplay,
@@ -550,10 +698,20 @@ export const VirtualizedDemandList: React.FC<VirtualizedDemandListProps> = ({
     );
   }
 
-  // 2. Standard list (<= threshold): render standard stack with Framer Motion layout animations
+  // 2. Standard list (<= threshold): render standard stack with Framer Motion Reorder layout animations
   if (demands.length <= VIRTUALIZATION_THRESHOLD) {
     return (
-      <div className="space-y-3 flex-1 min-h-[80px] pb-1">
+      <Reorder.Group
+        as="div"
+        axis="y"
+        values={demands}
+        onReorder={(newOrder) => {
+          if (onReorderColumnDemands) {
+            onReorderColumnDemands(col.id, newOrder);
+          }
+        }}
+        className="space-y-3 flex-1 min-h-[80px] pb-1 list-none p-0 m-0"
+      >
         <AnimatePresence mode="popLayout" initial={false}>
           {demands.map((demand) => (
             <DemandCard
@@ -580,7 +738,7 @@ export const VirtualizedDemandList: React.FC<VirtualizedDemandListProps> = ({
             />
           ))}
         </AnimatePresence>
-      </div>
+      </Reorder.Group>
     );
   }
 
