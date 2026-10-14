@@ -19,8 +19,10 @@ import {
   DollarSign,
   FileText,
   Clock,
-  ExternalLink
+  ExternalLink,
+  Rocket
 } from 'lucide-react';
+import { serverDbService } from '../services/serverDbService';
 import {
   generateSystemBackup,
   downloadBackupJsonFile,
@@ -56,8 +58,38 @@ export const BackupRestoreTab: React.FC<BackupRestoreTabProps> = ({ onRestoreSuc
   const [isDragging, setIsDragging] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreSuccessNotice, setRestoreSuccessNotice] = useState<string | null>(null);
+  const [isCleaningLaunch, setIsCleaningLaunch] = useState(false);
+  const [cleanLaunchMessage, setCleanLaunchMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCleanLaunch = () => {
+    request2Fa({
+      actionTitle: 'Preparação para Lançamento Oficial (Reset Limpo)',
+      actionDescription: 'Esta ação removerá todos os clientes, demandas, serviços e dados de testes para o lançamento oficial.',
+      actionType: 'security_wipe',
+      riskLevel: 'critical',
+      onVerified: async () => {
+        setIsCleaningLaunch(true);
+        try {
+          const ok = await serverDbService.cleanLaunch();
+          if (ok) {
+            setCleanLaunchMessage('Sistema preparado com sucesso para o lançamento oficial! Base de dados resetada.');
+            refreshCurrentStats();
+            setTimeout(() => {
+              window.location.reload();
+            }, 1200);
+          } else {
+            alert('Erro ao executar limpeza no servidor central.');
+          }
+        } catch {
+          alert('Erro de conexão com o servidor central.');
+        } finally {
+          setIsCleaningLaunch(false);
+        }
+      },
+    });
+  };
 
   // Refresh current system data stats
   const refreshCurrentStats = () => {
@@ -532,6 +564,38 @@ export const BackupRestoreTab: React.FC<BackupRestoreTabProps> = ({ onRestoreSuc
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Preparação e Limpeza para Lançamento Oficial */}
+      <div className="bg-white dark:bg-[#0f172a] rounded-[26px] border border-amber-200/80 dark:border-amber-900/40 p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-xs font-black text-[#142142] dark:text-white uppercase tracking-wider">
+              <Rocket size={16} className="text-[#fab518]" />
+              <span>Preparação para Lançamento Oficial</span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+              Inicialização limpa da plataforma: remove todos os cadastros e dados de testes (clientes, demandas, serviços, faturas e propostas) e prepara o banco centralizado para operação comercial oficial.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCleanLaunch}
+            disabled={isCleaningLaunch}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 text-xs font-black transition-all shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            {isCleaningLaunch ? <RefreshCw size={15} className="animate-spin" /> : <Rocket size={15} />}
+            <span>{isCleaningLaunch ? 'Limpando Sistema...' : 'Preparar para Lançamento'}</span>
+          </button>
+        </div>
+
+        {cleanLaunchMessage && (
+          <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span>{cleanLaunchMessage}</span>
+          </div>
+        )}
       </div>
     </div>
   );

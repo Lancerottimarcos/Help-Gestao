@@ -15,6 +15,9 @@ export interface AppDatabasePayload {
   newMemberDefaultPermissions?: any;
   collaboratorRules?: any;
   deletedDemandIds?: string[];
+  deletedClientIds?: string[];
+  deletedServiceIds?: string[];
+  deletedTeamMemberIds?: string[];
   updatedAt?: number;
 }
 
@@ -449,10 +452,6 @@ export const serverDbService = {
    * Protege contra concorrência e condições de corrida entre demandas e clientes.
    */
   saveDatabase(payload: Partial<AppDatabasePayload>, immediate = false): Promise<boolean> {
-    if (Array.isArray(payload.teamMembers) && payload.teamMembers.length > 0) {
-      this.saveTeamMembersDirectly(payload.teamMembers).catch(() => {});
-    }
-
     return new Promise((resolve) => {
       pendingPayload = { ...pendingPayload, ...payload };
       pendingPromiseResolvers.push(resolve);
@@ -672,6 +671,23 @@ export const serverDbService = {
       console.warn('Erro ao enviar decisão para o servidor:', err);
     }
     return null;
+  },
+
+  /**
+   * Limpa completamente todos os cadastros (clientes, demandas, serviços, etc.)
+   * preparando o banco e a aplicação para lançamento oficial.
+   */
+  async cleanLaunch(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/clean-launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return res.ok;
+    } catch (err) {
+      console.error('Erro ao executar cleanLaunch:', err);
+      return false;
+    }
   },
 };
 

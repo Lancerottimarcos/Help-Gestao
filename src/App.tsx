@@ -300,6 +300,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const isServerDbLoadedRef = useRef(false);
   const lastLocalDemandUpdateRef = useRef<number>(0);
+  const lastLocalClientUpdateRef = useRef<number>(0);
+  const lastLocalServiceUpdateRef = useRef<number>(0);
+  const lastLocalProposalUpdateRef = useRef<number>(0);
+  const lastLocalInvoiceUpdateRef = useRef<number>(0);
   const recentLocalMovesRef = useRef<Map<string, { columnId: KanbanColumnId; updatedAt: number }>>(new Map());
   const lastLocalTeamMemberUpdateRef = useRef<number>(0);
   const lastLocalColumnUpdateRef = useRef<number>(0);
@@ -335,7 +339,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const getDeletedDemandIds = (): Set<string> => {
-    const defaultDeleted = ['DEM-619432', 'DEM-269498'];
+    const defaultDeleted: string[] = [];
     try {
       const raw = localStorage.getItem('agency_deleted_demand_ids');
       if (raw) {
@@ -365,7 +369,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const getDeletedClientIds = (): Set<string> => {
-    const defaultDeleted = ['cli-1791824669456'];
+    const defaultDeleted: string[] = [];
     try {
       const raw = localStorage.getItem('agency_deleted_client_ids');
       if (raw) {
@@ -439,6 +443,15 @@ export function Layout({ children, onLogout }: LayoutProps) {
         set.delete(id);
         localStorage.setItem('agency_deleted_service_ids', JSON.stringify(Array.from(set)));
       }
+    } catch {}
+  };
+
+  const clearAllDeletedTrackers = () => {
+    try {
+      localStorage.removeItem('agency_deleted_demand_ids');
+      localStorage.removeItem('agency_deleted_client_ids');
+      localStorage.removeItem('agency_deleted_service_ids');
+      localStorage.removeItem('agency_deleted_team_member_ids');
     } catch {}
   };
 
@@ -675,17 +688,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
         const remoteData = await serverDbService.fetchDatabase();
         if (!isMounted || !remoteData) return;
 
-        // Sincronização segura de CLIENTES (sem sobrescrita destrutiva)
+        // Sincronização segura de CLIENTES (sem sobrescrita destrutiva de clientes locais)
         if (remoteData.clients && Array.isArray(remoteData.clients)) {
-          if (remoteData.clients.length === 0) {
-            setClients((prev) => {
-              if (prev.length === 0) return prev;
-              try {
-                localStorage.setItem('agency_clients', JSON.stringify([]));
-              } catch {}
-              return [];
-            });
-          } else {
+          const isRecentlyEditedLocally = (Date.now() - lastLocalClientUpdateRef.current < 25000);
+          if (!isRecentlyEditedLocally) {
             const deletedClientIds = getDeletedClientIds();
             const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
 
@@ -694,6 +700,18 @@ export function Layout({ children, onLogout }: LayoutProps) {
               const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
               const localPending = cleanPrev.filter((c) => !remoteMap.has(c.id));
               const merged = [...cleanRemote, ...localPending];
+
+              if (merged.length === 0) {
+                try {
+                  localStorage.setItem('agency_clients', JSON.stringify([]));
+                } catch {}
+                return [];
+              }
+
+              // Se existirem clientes locais pendentes ausentes no servidor, salva-os no banco central
+              if (localPending.length > 0) {
+                serverDbService.saveDatabase({ clients: merged });
+              }
 
               if (
                 cleanPrev.length === merged.length &&
@@ -710,47 +728,17 @@ export function Layout({ children, onLogout }: LayoutProps) {
           }
         }
 
-        // Sincronização segura de DEMANDAS (sem sobrescrita destrutiva)
-        let remoteDemandsList = (remoteData.demands && Array.isArray(remoteData.demands)) ? remoteData.demands : [];
-        if (remoteDemandsList.length === 0) {
-          try {
-            const direct = await serverDbService.fetchDemandsDirectly();
-            if (Array.isArray(direct) && direct.length > 0) {
-              remoteDemandsList = direct;
-            }
-          } catch {}
-        }
-
+        // Sincronização segura de DEMANDAS (sem sobrescrita destrutiva de demandas locais)
         if (remoteData.demands && Array.isArray(remoteData.demands)) {
-          const deletedDemandIds = getDeletedDemandIds();
-          if (remoteDemandsList.length === 0) {
-            setDemands((prev) => {
-              const cleanPrev = prev.filter((d) => !deletedDemandIds.has(d.id));
-              if (cleanPrev.length > 0) {
-                // Preserva demandas criadas localmente e re-sincroniza com o servidor central
-                serverDbService.saveDatabase({ demands: cleanPrev }, true);
-                serverDbService.saveDemandsDirectly(cleanPrev);
-                try {
-                  localStorage.setItem('agency_demands', JSON.stringify(cleanPrev));
-                } catch {}
-                return cleanPrev;
-              }
-              return [];
-            });
-          } else {
+          const isRecentlyEditedLocally = (Date.now() - lastLocalDemandUpdateRef.current < 25000);
+          if (!isRecentlyEditedLocally) {
             const deletedDemandIds = getDeletedDemandIds();
-            const cleanRemote = remoteDemandsList.filter((d) => !deletedDemandIds.has(d.id));
+            const cleanRemote = remoteData.demands.filter((d) => !deletedDemandIds.has(d.id));
 
             setDemands((prev) => {
               const cleanPrev = prev.filter((d) => !deletedDemandIds.has(d.id));
               const remoteMap = new Map(cleanRemote.map((d) => [d.id, d]));
               const localPending = cleanPrev.filter((d) => !remoteMap.has(d.id));
-
-              // Preserva alterações locais recentes feitas há menos de 30 segundos
-              const isRecentlyEditedLocally = (Date.now() - lastLocalDemandUpdateRef.current < 30000);
-              if (isRecentlyEditedLocally) {
-                return prev;
-              }
 
               const merged = cleanRemote.map((rem) => {
                 const loc = cleanPrev.find((p) => p.id === rem.id);
@@ -759,7 +747,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
                 const recentMove = recentLocalMovesRef.current.get(rem.id);
                 const isRecent = recentMove && (Date.now() - recentMove.updatedAt < 60000);
 
-                // Se o servidor tem atualização de decisão/ajuste do cliente, prioriza os dados do servidor
                 const hasRemoteClientAction =
                   rem.approvalStatus === 'alteracao_solicitada' ||
                   Boolean(rem.approvalFeedback) ||
@@ -780,22 +767,26 @@ export function Layout({ children, onLogout }: LayoutProps) {
                   };
                 }
 
-                // Preserva o columnId local caso tenha sido movido ou alterado localmente
                 const targetCol = isRecent ? recentMove.columnId : (loc.columnId || rem.columnId);
                 return { ...rem, ...loc, columnId: targetCol };
               });
 
-              // Adiciona as demandas cadastradas localmente pendentes de sincronização
               localPending.forEach((loc) => {
                 if (!merged.some((m) => m.id === loc.id)) {
                   merged.push(loc);
                 }
               });
 
-              // Auto-cura: se houver demandas criadas localmente que o servidor ainda não tem, persiste imediatamente
+              if (merged.length === 0) {
+                try {
+                  localStorage.setItem('agency_demands', JSON.stringify([]));
+                } catch {}
+                return [];
+              }
+
+              // Se houver demandas locais pendentes ausentes no servidor, salva-as no banco central
               if (localPending.length > 0) {
-                serverDbService.saveDatabase({ demands: merged }, true);
-                serverDbService.saveDemandsDirectly(merged);
+                serverDbService.saveDatabase({ demands: merged });
               }
 
               if (
@@ -813,16 +804,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
           }
         }
 
+        // Sincronização segura de SERVIÇOS (sem sobrescrita destrutiva)
         if (remoteData.services && Array.isArray(remoteData.services)) {
-          if (remoteData.services.length === 0) {
-            setServices((prev) => {
-              if (prev.length === 0) return prev;
-              try {
-                localStorage.setItem('agency_services', JSON.stringify([]));
-              } catch {}
-              return [];
-            });
-          } else {
+          const isRecentlyEditedLocally = (Date.now() - lastLocalServiceUpdateRef.current < 25000);
+          if (!isRecentlyEditedLocally) {
             const deletedServiceIds = getDeletedServiceIds();
             const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
 
@@ -832,9 +817,20 @@ export function Layout({ children, onLogout }: LayoutProps) {
               const localPending = cleanPrev.filter((s) => !remoteMap.has(s.id));
               const merged = [...cleanRemote, ...localPending];
 
+              if (merged.length === 0) {
+                try {
+                  localStorage.setItem('agency_services', JSON.stringify([]));
+                } catch {}
+                return [];
+              }
+
+              if (localPending.length > 0) {
+                serverDbService.saveDatabase({ services: merged });
+              }
+
               if (
                 cleanPrev.length === merged.length &&
-                cleanPrev.every((p, idx) => p.id === merged[idx]?.id && p.title === merged[idx]?.title && p.basePrice === merged[idx]?.basePrice)
+                cleanPrev.every((p, idx) => p.id === merged[idx]?.id && (p.title === merged[idx]?.title || (p as any).name === (merged[idx] as any)?.name))
               ) {
                 return prev;
               }
@@ -1009,10 +1005,16 @@ export function Layout({ children, onLogout }: LayoutProps) {
           const cleanLocalClients = localClients.filter((c) => !deletedClientIds.has(c.id));
           if (remoteData.clients && Array.isArray(remoteData.clients)) {
             if (remoteData.clients.length === 0) {
-              setClients([]);
-              try {
-                localStorage.setItem('agency_clients', JSON.stringify([]));
-              } catch {}
+              if (cleanLocalClients.length > 0) {
+                setClients(cleanLocalClients);
+                needsServerPush = true;
+                pushPayload.clients = cleanLocalClients;
+              } else {
+                setClients([]);
+                try {
+                  localStorage.setItem('agency_clients', JSON.stringify([]));
+                } catch {}
+              }
             } else {
               const cleanRemote = remoteData.clients.filter((c) => !deletedClientIds.has(c.id));
               const remoteMap = new Map(cleanRemote.map((c) => [c.id, c]));
@@ -1151,10 +1153,16 @@ export function Layout({ children, onLogout }: LayoutProps) {
           const cleanLocalServices = localServices.filter((s) => !deletedServiceIds.has(s.id));
           if (remoteData.services && Array.isArray(remoteData.services)) {
             if (remoteData.services.length === 0) {
-              setServices([]);
-              try {
-                localStorage.setItem('agency_services', JSON.stringify([]));
-              } catch {}
+              if (cleanLocalServices.length > 0) {
+                setServices(cleanLocalServices);
+                needsServerPush = true;
+                pushPayload.services = cleanLocalServices;
+              } else {
+                setServices([]);
+                try {
+                  localStorage.setItem('agency_services', JSON.stringify([]));
+                } catch {}
+              }
             } else {
               const cleanRemote = remoteData.services.filter((s) => !deletedServiceIds.has(s.id));
               const remoteMap = new Map(cleanRemote.map((s) => [s.id, s]));
@@ -1230,6 +1238,28 @@ export function Layout({ children, onLogout }: LayoutProps) {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+          if (msg.type === 'clean_launch') {
+            setClients([]);
+            setDemands([]);
+            setServices([]);
+            setProposals([]);
+            setInvoices([]);
+            setActivities([]);
+            clearAllDeletedTrackers();
+            try {
+              localStorage.removeItem('agency_clients');
+              localStorage.removeItem('agency_demands');
+              localStorage.removeItem('agency_services');
+              localStorage.removeItem('agency_proposals');
+              localStorage.removeItem('agency_invoices');
+              localStorage.removeItem('agency_activities');
+              localStorage.removeItem('agency_deleted_demand_ids');
+              localStorage.removeItem('agency_deleted_client_ids');
+              localStorage.removeItem('agency_deleted_service_ids');
+              localStorage.removeItem('agency_deleted_team_member_ids');
+            } catch {}
+            return;
+          }
           if (msg.type === 'demands:update' && Array.isArray(msg.demands)) {
             const deletedIds = getDeletedDemandIds();
             const cleanIncoming = msg.demands.filter((d: DemandItem) => !deletedIds.has(d.id));
@@ -1269,6 +1299,38 @@ export function Layout({ children, onLogout }: LayoutProps) {
               } catch {}
               return merged;
             });
+          } else if (msg.type === 'clients:update' && Array.isArray(msg.clients)) {
+            const isRecentlyEditedLocally = (Date.now() - lastLocalClientUpdateRef.current < 25000);
+            if (!isRecentlyEditedLocally) {
+              const deletedIds = getDeletedClientIds();
+              const cleanIncoming = msg.clients.filter((c: Client) => !deletedIds.has(c.id));
+              setClients((prev) => {
+                const prevClean = prev.filter((c) => !deletedIds.has(c.id));
+                const remoteMap = new Map(cleanIncoming.map((c: Client) => [c.id, c]));
+                const localPending = prevClean.filter((c) => !remoteMap.has(c.id));
+                const merged = [...cleanIncoming, ...localPending];
+                try {
+                  localStorage.setItem('agency_clients', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
+          } else if (msg.type === 'services:update' && Array.isArray(msg.services)) {
+            const isRecentlyEditedLocally = (Date.now() - lastLocalServiceUpdateRef.current < 25000);
+            if (!isRecentlyEditedLocally) {
+              const deletedIds = getDeletedServiceIds();
+              const cleanIncoming = msg.services.filter((s: Service) => !deletedIds.has(s.id));
+              setServices((prev) => {
+                const prevClean = prev.filter((s) => !deletedIds.has(s.id));
+                const remoteMap = new Map(cleanIncoming.map((s: Service) => [s.id, s]));
+                const localPending = prevClean.filter((s) => !remoteMap.has(s.id));
+                const merged = [...cleanIncoming, ...localPending];
+                try {
+                  localStorage.setItem('agency_services', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
           } else if (msg.type === 'team_members:update' && Array.isArray(msg.teamMembers)) {
             const deletedIds = getDeletedTeamMemberIds();
             const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
@@ -1283,6 +1345,40 @@ export function Layout({ children, onLogout }: LayoutProps) {
               return merged;
             });
           } else if (msg.type === 'database:update') {
+            if (msg.clients && Array.isArray(msg.clients)) {
+              const isRecentlyEditedLocally = (Date.now() - lastLocalClientUpdateRef.current < 25000);
+              if (!isRecentlyEditedLocally) {
+                const deletedIds = getDeletedClientIds();
+                const cleanIncoming = msg.clients.filter((c: Client) => !deletedIds.has(c.id));
+                setClients((prev) => {
+                  const prevClean = prev.filter((c) => !deletedIds.has(c.id));
+                  const remoteMap = new Map(cleanIncoming.map((c: Client) => [c.id, c]));
+                  const localPending = prevClean.filter((c) => !remoteMap.has(c.id));
+                  const merged = [...cleanIncoming, ...localPending];
+                  try {
+                    localStorage.setItem('agency_clients', JSON.stringify(merged));
+                  } catch {}
+                  return merged;
+                });
+              }
+            }
+            if (msg.services && Array.isArray(msg.services)) {
+              const isRecentlyEditedLocally = (Date.now() - lastLocalServiceUpdateRef.current < 25000);
+              if (!isRecentlyEditedLocally) {
+                const deletedIds = getDeletedServiceIds();
+                const cleanIncoming = msg.services.filter((s: Service) => !deletedIds.has(s.id));
+                setServices((prev) => {
+                  const prevClean = prev.filter((s) => !deletedIds.has(s.id));
+                  const remoteMap = new Map(cleanIncoming.map((s: Service) => [s.id, s]));
+                  const localPending = prevClean.filter((s) => !remoteMap.has(s.id));
+                  const merged = [...cleanIncoming, ...localPending];
+                  try {
+                    localStorage.setItem('agency_services', JSON.stringify(merged));
+                  } catch {}
+                  return merged;
+                });
+              }
+            }
             if (msg.teamMembers && Array.isArray(msg.teamMembers)) {
               const deletedIds = getDeletedTeamMemberIds();
               const mockIds = new Set(['mem-2', 'mem-3', 'mem-4']);
@@ -1334,7 +1430,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
               });
             }
             // Só dispara sincronização de banco se não houver edição local recente nos últimos 15s
-            if (Date.now() - lastLocalDemandUpdateRef.current > 15000) {
+            if (
+              Date.now() - lastLocalDemandUpdateRef.current > 15000 &&
+              Date.now() - lastLocalClientUpdateRef.current > 15000 &&
+              Date.now() - lastLocalServiceUpdateRef.current > 15000
+            ) {
               syncWithServerDb(true);
             }
           }
@@ -1345,7 +1445,11 @@ export function Layout({ children, onLogout }: LayoutProps) {
     // Sincroniza imediatamente quando a janela / aba do navegador ganha foco (ao alternar entre abas ou celulares)
     const handleFocus = () => {
       handleSyncWithSupabase(true);
-      if (Date.now() - lastLocalDemandUpdateRef.current > 15000) {
+      if (
+        Date.now() - lastLocalDemandUpdateRef.current > 15000 &&
+        Date.now() - lastLocalClientUpdateRef.current > 15000 &&
+        Date.now() - lastLocalServiceUpdateRef.current > 15000
+      ) {
         syncWithServerDb(true);
       }
     };
@@ -1817,7 +1921,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
       .catch((err) => {
         console.warn(`[Kanban Optimistic UI] Aviso ao persistir demanda "${demandId}":`, err);
       });
-    serverDbService.saveDemandsDirectly(updatedResultList).catch(() => {});
 
     // Sincroniza em background com o Supabase PostgreSQL se configurado
     if (supabaseService.isConfigured() && updatedDemandItem) {
@@ -1846,7 +1949,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
     });
 
     serverDbService.saveDatabase({ demands: finalDemands }, true).catch(() => {});
-    serverDbService.saveDemandsDirectly(finalDemands).catch(() => {});
   };
 
   const handleUpdateDemandColumn = (demandId: string, newColumn: KanbanColumnId) => {
@@ -1860,23 +1962,22 @@ export function Layout({ children, onLogout }: LayoutProps) {
     lastLocalDemandUpdateRef.current = Date.now();
     recentLocalMovesRef.current.set(newDemand.id, { columnId: newDemand.columnId, updatedAt: Date.now() });
 
-    let nextDemands: DemandItem[] = [];
+    let demandsToSave: DemandItem[] = [];
     setDemands((prev) => {
       const updated = [newDemand, ...prev.filter((d) => d.id !== newDemand.id)];
-      nextDemands = updated;
+      demandsToSave = updated;
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ demands: updated }, true);
-      serverDbService.saveDemandsDirectly(updated);
       return updated;
     });
 
-    const demandsToSave = nextDemands.length > 0 ? nextDemands : [newDemand, ...demands.filter(d => d.id !== newDemand.id)];
-    serverDbService.saveDatabase({ demands: demandsToSave }, true);
-    serverDbService.saveDemandsDirectly(demandsToSave);
+    if (demandsToSave.length === 0) {
+      demandsToSave = [newDemand, ...demands.filter(d => d.id !== newDemand.id)];
+    }
 
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
+    let clientsToSave: Client[] = [];
     setClients((prevClients) => {
       const updatedClients = prevClients.map((c) => {
         const matchesClient = (newDemand.clientId && c.id === newDemand.clientId) ||
@@ -1888,25 +1989,22 @@ export function Layout({ children, onLogout }: LayoutProps) {
         }
         return c;
       });
+      clientsToSave = updatedClients;
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients, demands: demandsToSave });
       return updatedClients;
     });
+
+    const finalClients = clientsToSave.length > 0 ? clientsToSave : clients;
+
+    // Gravação central atômica única
+    serverDbService.saveDatabase({ demands: demandsToSave, clients: finalClients }, true).catch(() => {});
 
     // Sincroniza em background com o Supabase PostgreSQL se configurado
     if (supabaseService.isConfigured()) {
       supabaseService.upsertDemand(newDemand);
     }
-
-    // Notificação de WhatsApp ao criar em aprovação desabilitada temporariamente (recurso futuro)
-    // if (newDemand.columnId === 'aprovacao') {
-    //   const config = getNotificationConfig();
-    //   if (config.autoOpenModalOnMove) {
-    //     setWhatsAppDemand(newDemand);
-    //   }
-    // }
 
     const newActivity: ClientActivity = {
       id: `act-${Date.now()}`,
@@ -1976,26 +2074,31 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ demands: updated }, true);
-      serverDbService.saveDemandsDirectly(updated);
       return updated;
     });
 
+    const demandsToSave = updatedDemandsList.length > 0 ? updatedDemandsList : demands.map((item) => (item.id === finalDemand.id ? finalDemand : item));
+
     // Atualiza contagem de demandas ativas nos clientes e salva de forma atômica
+    let clientsToSave: Client[] = [];
     setClients((prevClients) => {
-      const currentDemands = updatedDemandsList.length > 0 ? updatedDemandsList : demands.map((item) => (item.id === finalDemand.id ? finalDemand : item));
       const updatedClients = prevClients.map((c) => {
-        const count = currentDemands.filter(d => {
+        const count = demandsToSave.filter(d => {
           return (d.clientId === c.id || d.client.toLowerCase() === c.name.toLowerCase()) && d.columnId !== 'concluidas';
         }).length;
         return { ...c, activeDemandsCount: count };
       });
+      clientsToSave = updatedClients;
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients, demands: currentDemands }, true);
       return updatedClients;
     });
+
+    const finalClients = clientsToSave.length > 0 ? clientsToSave : clients;
+
+    // Gravação central atômica única
+    serverDbService.saveDatabase({ clients: finalClients, demands: demandsToSave }, true).catch(() => {});
 
     if (supabaseService.isConfigured()) {
       supabaseService.upsertDemand(finalDemand);
@@ -2252,12 +2355,10 @@ export function Layout({ children, onLogout }: LayoutProps) {
       try {
         localStorage.setItem('agency_demands', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ demands: updated, deletedDemandIds: [demandId] }, true);
-      serverDbService.saveDemandsDirectly(updated);
-      serverDbService.deleteDemandDirectly(demandId);
       return updated;
     });
 
+    let nextClients: Client[] = [];
     setClients((prevClients) => {
       const updatedClients = prevClients.map((c) => {
         const count = remainingDemands.filter(
@@ -2265,18 +2366,21 @@ export function Layout({ children, onLogout }: LayoutProps) {
         ).length;
         return { ...c, activeDemandsCount: count };
       });
+      nextClients = updatedClients;
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updatedClients));
       } catch {}
-      serverDbService.saveDatabase({ clients: updatedClients, demands: remainingDemands });
       return updatedClients;
     });
+
+    serverDbService.saveDatabase({ demands: remainingDemands, clients: nextClients, deletedDemandIds: [demandId] }, true);
 
     supabaseService.deleteDemand(demandId);
   };
 
   const handleAddClient = (newClient: Client) => {
     removeDeletedClientId(newClient.id);
+    lastLocalClientUpdateRef.current = Date.now();
     let updatedClients: Client[] = [];
     setClients((prev) => {
       const updated = [newClient, ...prev.filter((c) => c.id !== newClient.id)];
@@ -2288,10 +2392,13 @@ export function Layout({ children, onLogout }: LayoutProps) {
     });
     const clientsToSave = updatedClients.length > 0 ? updatedClients : [newClient, ...clients.filter(c => c.id !== newClient.id)];
     serverDbService.saveDatabase({ clients: clientsToSave }, true);
-    supabaseService.upsertClient(newClient);
+    if (supabaseService.isConfigured()) {
+      supabaseService.upsertClient(newClient);
+    }
   };
 
   const handleUpdateClient = (updatedClient: Client) => {
+    lastLocalClientUpdateRef.current = Date.now();
     const prevClient = clients.find((c) => c.id === updatedClient.id);
     const oldName = prevClient?.name?.trim();
     const oldCompanyName = prevClient?.companyName?.trim();
@@ -2373,37 +2480,50 @@ export function Layout({ children, onLogout }: LayoutProps) {
       return changed ? updated : prevInvoices;
     });
 
-    supabaseService.upsertClient(updatedClient);
+    if (supabaseService.isConfigured()) {
+      supabaseService.upsertClient(updatedClient);
+    }
   };
 
   const handleDeleteClient = (clientId: string) => {
     addDeletedClientId(clientId);
+    lastLocalClientUpdateRef.current = Date.now();
+    let remainingClients: Client[] = [];
     setClients((prev) => {
       const updated = prev.filter((c) => c.id !== clientId);
+      remainingClients = updated;
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ clients: updated }, true);
       return updated;
     });
-    supabaseService.deleteClient(clientId);
+    serverDbService.saveDatabase({ clients: remainingClients, deletedClientIds: [clientId] }, true);
+    if (supabaseService.isConfigured()) {
+      supabaseService.deleteClient(clientId);
+    }
   };
 
   const handleDeleteMultipleClients = (clientIds: string[]) => {
     clientIds.forEach((id) => addDeletedClientId(id));
+    lastLocalClientUpdateRef.current = Date.now();
+    let remainingClients: Client[] = [];
     setClients((prev) => {
       const updated = prev.filter((c) => !clientIds.includes(c.id));
+      remainingClients = updated;
       try {
         localStorage.setItem('agency_clients', JSON.stringify(updated));
       } catch {}
-      serverDbService.saveDatabase({ clients: updated }, true);
       return updated;
     });
-    clientIds.forEach(id => supabaseService.deleteClient(id));
+    serverDbService.saveDatabase({ clients: remainingClients, deletedClientIds: clientIds }, true);
+    if (supabaseService.isConfigured()) {
+      clientIds.forEach(id => supabaseService.deleteClient(id));
+    }
   };
 
   const handleAddService = (newService: Service) => {
     removeDeletedServiceId(newService.id);
+    lastLocalServiceUpdateRef.current = Date.now();
     let updatedServices: Service[] = [];
     setServices((prev) => {
       const updated = [newService, ...prev.filter((s) => s.id !== newService.id)];
@@ -2421,6 +2541,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
   };
 
   const handleUpdateService = (updatedService: Service) => {
+    lastLocalServiceUpdateRef.current = Date.now();
     let updatedServices: Service[] = [];
     setServices((prev) => {
       const updated = prev.map((s) => (s.id === updatedService.id ? updatedService : s));
@@ -2439,6 +2560,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
 
   const handleDeleteService = (serviceId: string) => {
     addDeletedServiceId(serviceId);
+    lastLocalServiceUpdateRef.current = Date.now();
     let updatedServices: Service[] = [];
     setServices((prev) => {
       const updated = prev.filter((s) => s.id !== serviceId);
@@ -2449,7 +2571,7 @@ export function Layout({ children, onLogout }: LayoutProps) {
       return updated;
     });
     const servicesToSave = updatedServices.length > 0 ? updatedServices : services.filter(s => s.id !== serviceId);
-    serverDbService.saveDatabase({ services: servicesToSave }, true);
+    serverDbService.saveDatabase({ services: servicesToSave, deletedServiceIds: [serviceId] }, true);
     if (supabaseService.isConfigured()) {
       supabaseService.deleteService(serviceId);
     }
@@ -2465,7 +2587,6 @@ export function Layout({ children, onLogout }: LayoutProps) {
         localStorage.setItem('agency_team_members', JSON.stringify(finalMembers));
       } catch {}
       serverDbService.saveDatabase({ teamMembers: finalMembers }, true);
-      serverDbService.saveTeamMembersDirectly(finalMembers).catch(() => {});
       return finalMembers;
     });
     if (supabaseService.isConfigured()) {
