@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, 
   Users, 
@@ -10,36 +10,26 @@ import {
   AlertCircle, 
   ArrowUpRight, 
   Sparkles,
-  ExternalLink,
   ChevronRight,
   ArrowRight,
   Calendar,
   Plus,
-  GripVertical,
   ArrowUp,
   ArrowDown,
-  SlidersHorizontal,
-  RotateCcw,
-  Check,
-  Move,
-  CheckCircle,
-  Eye,
-  EyeOff,
-  Undo2,
-  Briefcase,
-  FileSpreadsheet,
   AlertTriangle,
   CalendarX2,
   Building2,
   Flame,
-  ArrowUpDown,
-  ShieldAlert,
-  RefreshCw,
   Search,
   Layers,
-  Compass
+  Compass,
+  LayoutGrid,
+  BarChart3,
+  Check,
+  FileSpreadsheet,
+  Receipt
 } from 'lucide-react';
-import { Client, DemandItem, KanbanColumn, PageId, ClientActivity, InicioSectionId, InicioSectionMeta, Invoice, TeamMember } from '../types';
+import { Client, DemandItem, KanbanColumn, PageId, ClientActivity, Invoice, TeamMember } from '../types';
 import { ClientLocationMap } from '../components/ClientLocationMap';
 import { ClientBirthdaysSection } from '../components/ClientBirthdaysSection';
 import { DemandsStoriesSection } from '../components/DemandsStoriesSection';
@@ -124,7 +114,6 @@ export const isConcludedDemand = (demand: DemandItem, columns?: KanbanColumn[]):
 };
 
 const getDemandDueStatus = (demand: DemandItem, columns?: KanbanColumn[]): DemandDueStatus => {
-  // Demandas na coluna Concluídos ou com status de conclusão NUNCA são consideradas em atraso
   if (isConcludedDemand(demand, columns)) {
     return {
       status: 'concluida',
@@ -181,27 +170,24 @@ const getDemandDueStatus = (demand: DemandItem, columns?: KanbanColumn[]): Deman
       badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300/80 dark:border-rose-800 font-bold'
     };
   }
-
   if (diffDays === 0) {
     return {
       status: 'hoje',
-      label: 'Vence hoje!',
+      label: 'Vence hoje',
       isOverdue: false,
       daysDiff: 0,
-      badgeClass: 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300/80 dark:border-amber-800 font-bold'
+      badgeClass: 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200 border-amber-300/80 dark:border-amber-700 font-bold'
     };
   }
-
   if (diffDays === 1) {
     return {
       status: 'amanha',
       label: 'Vence amanhã',
       isOverdue: false,
       daysDiff: 1,
-      badgeClass: 'bg-amber-50/70 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+      badgeClass: 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200/80 dark:border-amber-800'
     };
   }
-
   if (diffDays <= 7) {
     return {
       status: 'semana',
@@ -211,115 +197,16 @@ const getDemandDueStatus = (demand: DemandItem, columns?: KanbanColumn[]): Deman
       badgeClass: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800'
     };
   }
-
-  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  const formatted = `${parsed.getDate()} ${months[parsed.getMonth()]}`;
   return {
     status: 'futuro',
-    label: formatted,
+    label: formatDemandDateFull(demand.dueDate),
     isOverdue: false,
     daysDiff: diffDays,
-    badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+    badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-300 border-slate-200 dark:border-slate-700'
   };
 };
 
-const COLUMN_CONFIG: Record<string, { label: string; color: string; badge: string }> = {
-  ideias: { label: 'Ideias', color: '#EF4444', badge: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900/60' },
-  producao: { label: 'Em Produção', color: '#8B5CF6', badge: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-900/60' },
-  aprovacao: { label: 'Aprovação', color: '#FAB518', badge: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900/60' },
-  agendamento: { label: 'Agendamento', color: '#10B981', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60' },
-  concluidas: { label: 'Concluídas', color: '#10B981', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60' },
-  concluidos: { label: 'Concluídos', color: '#10B981', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60' },
-  concluida: { label: 'Concluída', color: '#10B981', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60' },
-  concluido: { label: 'Concluído', color: '#10B981', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60' },
-};
-
-const DEFAULT_SECTIONS: InicioSectionId[] = [
-  'welcome',
-  'demandas_stories',
-  'prioridades',
-  'aniversariantes',
-  'mapa',
-];
-
-const SECTIONS_META: Record<InicioSectionId, InicioSectionMeta> = {
-  welcome: {
-    id: 'welcome',
-    title: 'Boas-vindas & Saudação',
-    shortLabel: 'Boas-vindas',
-    description: 'Data do dia, saudação personalizada e status',
-    iconName: 'calendar',
-  },
-  demandas_stories: {
-    id: 'demandas_stories',
-    title: 'Atualizações das Demandas (Stories)',
-    shortLabel: 'Stories das Contas',
-    description: 'Carrossel estilo Stories do Instagram com novidades e movimentações das contas',
-    iconName: 'sparkles',
-  },
-  aniversariantes: {
-    id: 'aniversariantes',
-    title: 'Aniversariantes de Clientes',
-    shortLabel: 'Aniversariantes',
-    description: 'Alertas de aniversários de hoje, semana e mês com felicitações',
-    iconName: 'cake',
-  },
-  mapa: {
-    id: 'mapa',
-    title: 'Distribuição Geográfica de Clientes',
-    shortLabel: 'Mapa de Clientes',
-    description: 'Localização e presença das contas atendidas pelo Brasil',
-    iconName: 'map-pin',
-  },
-  prioridades: {
-    id: 'prioridades',
-    title: 'Demandas Prioritárias & Acesso Rápido',
-    shortLabel: 'Prioridades & Status',
-    description: 'Prazos críticos da semana, gráfico de status e atalhos rápidos',
-    iconName: 'kanban',
-  },
-};
-
-const STORAGE_ORDER_KEY = 'ideias_digitais_inicio_sections_order_v5';
-const STORAGE_HIDDEN_KEY = 'ideias_digitais_inicio_sections_hidden_v5';
-
-const loadSavedOrder = (): InicioSectionId[] => {
-  try {
-    const saved = localStorage.getItem(STORAGE_ORDER_KEY);
-    if (!saved) return DEFAULT_SECTIONS;
-    const parsed = JSON.parse(saved) as any[];
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      const validSections = parsed.filter((id) => id !== 'indicadores' && DEFAULT_SECTIONS.includes(id as InicioSectionId)) as InicioSectionId[];
-      if (!validSections.includes('demandas_stories')) {
-        const welcomeIndex = validSections.indexOf('welcome');
-        if (welcomeIndex !== -1) {
-          validSections.splice(welcomeIndex + 1, 0, 'demandas_stories');
-        } else {
-          validSections.unshift('demandas_stories');
-        }
-      }
-      const missingSections = DEFAULT_SECTIONS.filter((id) => !validSections.includes(id));
-      return [...validSections, ...missingSections];
-    }
-  } catch (err) {
-    console.warn('Erro ao carregar ordem das seções:', err);
-  }
-  return DEFAULT_SECTIONS;
-};
-
-const loadSavedHidden = (): InicioSectionId[] => {
-  try {
-    const saved = localStorage.getItem(STORAGE_HIDDEN_KEY);
-    if (!saved) return [];
-    const parsed = JSON.parse(saved) as any[];
-    if (Array.isArray(parsed)) {
-      return parsed.filter((id) => id !== 'indicadores' && DEFAULT_SECTIONS.includes(id as InicioSectionId)) as InicioSectionId[];
-    }
-  } catch (err) {
-    console.warn('Erro ao carregar seções ocultas:', err);
-  }
-  return [];
-};
+type InicioMainTab = 'visao_geral' | 'demandas_prazos' | 'clientes_crm' | 'desempenho_equipe';
 
 interface InicioViewProps {
   onNavigate: (page: PageId) => void;
@@ -346,6 +233,12 @@ export const InicioView: React.FC<InicioViewProps> = ({
   onSelectDemand,
   onSelectClient,
 }) => {
+  // Aba principal de navegação estilizada no mesmo padrão do Financeiro
+  const [currentTab, setCurrentTab] = useState<InicioMainTab>('visao_geral');
+  const [criticalFilter, setCriticalFilter] = useState<'atrasadas' | 'hoje' | 'proximas'>('atrasadas');
+  const [demandTab, setDemandTab] = useState<'todas' | 'atrasadas' | 'hoje' | 'proximas' | 'producao' | 'aprovacao'>('todas');
+  const [demandSearch, setDemandSearch] = useState('');
+
   // Sincronização dinâmica de responsável com a Equipe
   const getAssigneeInfo = (assignee?: { name?: string; avatar?: string }) => {
     const rawName = assignee?.name || '';
@@ -365,7 +258,7 @@ export const InicioView: React.FC<InicioViewProps> = ({
     };
   };
 
-  // Obter avatar e informações do cliente para a demanda
+  // Informações completas do cliente associado à demanda
   const getClientInfo = (demand: DemandItem) => {
     const rawClientName = demand.client || '';
     const matched = clients.find(
@@ -388,7 +281,7 @@ export const InicioView: React.FC<InicioViewProps> = ({
     };
   };
 
-  // Obter colunas ativas sincronizadas (prop ou persistência no localStorage)
+  // Colunas ativas sincronizadas com o Kanban
   const activeColumns = useMemo(() => {
     if (columns && columns.length > 0) return columns;
     try {
@@ -401,37 +294,11 @@ export const InicioView: React.FC<InicioViewProps> = ({
     return kanbanColumnsData;
   }, [columns]);
 
-  // Sincronização dinâmica do nome e estilo da coluna com o Quadro Kanban
-  const getColumnConfig = (columnId: string) => {
-    const colObj = activeColumns.find((c) => c.id === columnId || c.id.toLowerCase() === columnId.toLowerCase());
-    const baseConfig = COLUMN_CONFIG[columnId] || COLUMN_CONFIG[columnId.toLowerCase()];
-    const isConcluded = isConcludedColumn(columnId, activeColumns);
-    
-    // O nome da coluna reflete fielmente o título real no Quadro Kanban
-    const label = colObj?.title || baseConfig?.label || (isConcluded ? 'Concluídas' : columnId);
-    const color = colObj?.color || baseConfig?.color || (isConcluded ? '#10B981' : '#64748B');
-    const badge = isConcluded 
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60'
-      : (baseConfig?.badge || 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700');
-
-    return {
-      label,
-      color,
-      badge,
-      isCustom: !!colObj?.isCustom,
-    };
-  };
-
-  // Seções exibidas no Painel de Início
-  const visibleSections = DEFAULT_SECTIONS;
-
-  const [demandTab, setDemandTab] = useState<'todas' | 'atrasadas' | 'hoje' | 'proximas' | 'producao' | 'aprovacao'>('todas');
-  const [demandSearch, setDemandSearch] = useState('');
-
-  // Demandas ativas: NUNCA inclui demandas concluídas
+  // Demandas ativas: NUNCA inclui concluídas
   const activeDemands = useMemo(() => demands.filter((d) => !isConcludedDemand(d, activeColumns)), [demands, activeColumns]);
-  const pendingApprovals = useMemo(() => activeDemands.filter((d) => d.columnId === 'aprovacao'), [activeDemands]);
+  const concludedDemands = useMemo(() => demands.filter((d) => isConcludedDemand(d, activeColumns)), [demands, activeColumns]);
   const inProduction = useMemo(() => activeDemands.filter((d) => d.columnId === 'producao'), [activeDemands]);
+  const pendingApprovals = useMemo(() => activeDemands.filter((d) => d.columnId === 'aprovacao'), [activeDemands]);
   const scheduledDemands = useMemo(() => activeDemands.filter((d) => d.columnId === 'agendamento'), [activeDemands]);
 
   const demandDueStatusMap = useMemo(() => {
@@ -442,12 +309,12 @@ export const InicioView: React.FC<InicioViewProps> = ({
     return map;
   }, [demands, activeColumns]);
 
-  // 1. Demandas Atrasadas (prazo vencido e não concluídas)
+  // 1. Demandas Atrasadas
   const overdueDemands = useMemo(() => {
     return activeDemands.filter((d) => demandDueStatusMap.get(d.id)?.isOverdue);
   }, [activeDemands, demandDueStatusMap]);
 
-  // 2. Demandas do Dia (vencem hoje e não concluídas)
+  // 2. Demandas do Dia
   const dueTodayDemands = useMemo(() => {
     return activeDemands.filter((d) => {
       const st = demandDueStatusMap.get(d.id);
@@ -455,7 +322,7 @@ export const InicioView: React.FC<InicioViewProps> = ({
     });
   }, [activeDemands, demandDueStatusMap]);
 
-  // 3. Próximas Demandas (vencem amanhã, nos próximos dias, semanas ou futuras)
+  // 3. Próximas Demandas
   const upcomingDemands = useMemo(() => {
     return activeDemands.filter((d) => {
       const st = demandDueStatusMap.get(d.id);
@@ -464,7 +331,14 @@ export const InicioView: React.FC<InicioViewProps> = ({
     });
   }, [activeDemands, demandDueStatusMap]);
 
-  // Lista de demandas filtradas pela aba e campo de busca - SEMPRE EXCLUI CONCLUÍDAS
+  // Lista de demandas críticas para o Card Dark da direita
+  const criticalDemandsList = useMemo(() => {
+    if (criticalFilter === 'atrasadas') return overdueDemands;
+    if (criticalFilter === 'hoje') return dueTodayDemands;
+    return upcomingDemands;
+  }, [criticalFilter, overdueDemands, dueTodayDemands, upcomingDemands]);
+
+  // Lista de demandas filtradas pela barra de busca e abas da tabela operacional
   const filteredDemandsList = useMemo(() => {
     let list = activeDemands;
     if (demandTab === 'atrasadas') {
@@ -479,7 +353,6 @@ export const InicioView: React.FC<InicioViewProps> = ({
       list = pendingApprovals;
     }
 
-    // Filtro absoluto de segurança: nenhuma demanda concluída entra na lista
     list = list.filter((d) => !isConcludedDemand(d, activeColumns));
 
     if (demandSearch.trim()) {
@@ -492,720 +365,963 @@ export const InicioView: React.FC<InicioViewProps> = ({
       );
     }
 
-    // Ordenação estrita por prioridade temporal:
-    // 1º Demandas Atrasadas (as mais atrasadas no topo)
-    // 2º Demandas do Dia (vencem hoje!)
-    // 3º Demandas de Amanhã
-    // 4º Próximas demandas ordenadas cronologicamente
     return [...list].sort((a, b) => {
       const stA = demandDueStatusMap.get(a.id);
       const stB = demandDueStatusMap.get(b.id);
-      
-      // Atrasadas sempre primeiro
       if (stA?.isOverdue && !stB?.isOverdue) return -1;
       if (!stA?.isOverdue && stB?.isOverdue) return 1;
       if (stA?.isOverdue && stB?.isOverdue) {
         return (stA.daysDiff || 0) - (stB.daysDiff || 0);
       }
-
-      // Do Dia (Hoje) em segundo
       if (stA?.status === 'hoje' && stB?.status !== 'hoje') return -1;
       if (stA?.status !== 'hoje' && stB?.status === 'hoje') return 1;
-
-      // Amanhã em terceiro
       if (stA?.status === 'amanha' && stB?.status !== 'amanha') return -1;
       if (stA?.status !== 'amanha' && stB?.status === 'amanha') return 1;
-
-      // Demais próximas por dias restantes
       const diffA = stA?.daysDiff ?? 999;
       const diffB = stB?.daysDiff ?? 999;
-      if (diffA !== diffB) return diffA - diffB;
-
-      return 0;
+      return diffA - diffB;
     });
   }, [activeDemands, overdueDemands, dueTodayDemands, upcomingDemands, inProduction, pendingApprovals, demandTab, demandSearch, demandDueStatusMap, activeColumns]);
-  
+
   const activeClients = clients.filter((c) => c.status === 'Ativo');
-  
-  // Cálculos financeiros estritamente baseados nas faturas geradas
-  const totalInvoiced = invoices.reduce((acc, i) => acc + (i.value || 0), 0);
-  const totalPaidInvoices = invoices.filter(i => i.status === 'Pago').reduce((acc, i) => acc + (i.value || 0), 0);
-  const recurringInvoices = invoices.filter(i => (i.category || '').toLowerCase().includes('recorr'));
-  const totalMRR = recurringInvoices.reduce((acc, i) => acc + (i.value || 0), 0);
 
-  const lastClient = clients.length > 0 ? clients[clients.length - 1] : null;
+  // Dados para o gráfico do pipeline de produção (5 etapas principais do Kanban)
+  const pipelineStages = useMemo(() => {
+    return activeColumns.map((col) => {
+      const count = demands.filter((d) => d.columnId === col.id).length;
+      return {
+        id: col.id,
+        label: col.title,
+        count,
+        color: col.color || '#ff9900',
+      };
+    });
+  }, [activeColumns, demands]);
 
-  // New clients added this month (September 2026 or currently in onboarding)
-  const currentMonthYear = '2026-09';
-  const newClientsThisMonthList = clients.filter((c) => {
-    if (c.joinedDate) {
-      return c.joinedDate.startsWith(currentMonthYear) || c.status === 'Em Onboarding';
-    }
-    return c.status === 'Em Onboarding';
-  });
-  const newClientsThisMonth = newClientsThisMonthList.length;
+  const maxPipelineCount = useMemo(() => {
+    const maxVal = Math.max(...pipelineStages.map(s => s.count), 0);
+    return maxVal > 0 ? maxVal : 10;
+  }, [pipelineStages]);
 
-  // Format current date in Portuguese
+  // Data formatada com saudação amigável
   const todayFormatted = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric'
   }).format(new Date());
-
   const formattedDateCapitalized = todayFormatted.charAt(0).toUpperCase() + todayFormatted.slice(1);
 
-  // Dynamic greeting based on current hour
   const currentHour = new Date().getHours();
   let greeting = 'Bom dia';
-
   if (currentHour >= 12 && currentHour < 18) {
     greeting = 'Boa tarde';
   } else if (currentHour >= 18 || currentHour < 5) {
     greeting = 'Boa noite';
   }
 
-  // Render individual sections based on ID
-  const renderSectionContent = (sectionId: InicioSectionId) => {
-    switch (sectionId) {
-      case 'welcome':
-        return (
-          <div className="space-y-4">
-            {/* Barra de Saudação e Data */}
-            <div className="bg-white dark:bg-[#0f172a] rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-              <div className="space-y-1">
-                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  <span className="capitalize">{formattedDateCapitalized}</span>
+  return (
+    <div className="w-full space-y-6 pb-16 animate-in fade-in duration-150">
+      
+      {/* ==================================================================== */}
+      {/* 1. TOP SEGMENTED NAVIGATION TAB BAR & ACTION BUTTON                  */}
+      {/*    (EXATAMENTE IDÊNTICO AO DESIGN DA PÁGINA FINANCEIRO)              */}
+      {/* ==================================================================== */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        
+        {/* Navigation Tabs Pill Container */}
+        <div className="bg-white dark:bg-[#0c1424] rounded-full p-1.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center gap-1 overflow-x-auto scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setCurrentTab('visao_geral')}
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              currentTab === 'visao_geral'
+                ? 'bg-[#ff9900] text-[#142142] shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <LayoutGrid size={15} className={currentTab === 'visao_geral' ? 'text-[#142142]' : 'text-slate-500'} />
+            <span>Visão geral</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCurrentTab('demandas_prazos')}
+            className={`px-4 py-2 rounded-full text-xs font-semibold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              currentTab === 'demandas_prazos'
+                ? 'bg-[#ff9900] text-[#142142] font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Kanban size={15} className={currentTab === 'demandas_prazos' ? 'text-[#142142]' : 'text-slate-500'} />
+            <span>Demandas & Prazos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCurrentTab('clientes_crm')}
+            className={`px-4 py-2 rounded-full text-xs font-semibold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              currentTab === 'clientes_crm'
+                ? 'bg-[#ff9900] text-[#142142] font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Building2 size={15} className={currentTab === 'clientes_crm' ? 'text-[#142142]' : 'text-slate-500'} />
+            <span>Clientes & CRM</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCurrentTab('desempenho_equipe')}
+            className={`px-4 py-2 rounded-full text-xs font-semibold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              currentTab === 'desempenho_equipe'
+                ? 'bg-[#ff9900] text-[#142142] font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <BarChart3 size={15} className={currentTab === 'desempenho_equipe' ? 'text-[#142142]' : 'text-slate-500'} />
+            <span>Desempenho & Equipe</span>
+          </button>
+        </div>
+
+        {/* Action Button: + Nova Demanda */}
+        <button
+          type="button"
+          onClick={onOpenNewDemandModal}
+          className="px-6 py-2.5 rounded-full bg-[#ff9900] hover:bg-[#e68a00] text-[#142142] font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-md shrink-0 active:scale-95"
+        >
+          <Plus size={16} className="stroke-[3]" />
+          <span>Nova demanda</span>
+        </button>
+      </div>
+
+      {/* Saudação Executiva com Data */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-1">
+        <div>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 capitalize">
+            {formattedDateCapitalized}
+          </p>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            {greeting}, {currentUser.name}
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <span>{activeDemands.length} demandas ativas no pipeline</span>
+          <span aria-hidden="true">·</span>
+          <span>{clients.length} clientes cadastrados</span>
+        </div>
+      </div>
+
+      {/* ==================================================================== */}
+      {/* 2. TOP METRIC PILLS ROW (4 CAPSULE CARDS DISTINTOS DO FINANCEIRO)    */}
+      {/* ==================================================================== */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* KPI 1: Fluxo em Andamento (Orange Solid Capsule) */}
+        <div 
+          onClick={() => onNavigate('demandas')}
+          className="space-y-1.5 cursor-pointer group"
+          title="Ver demandas no Quadro Kanban"
+        >
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 pl-1 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+            Fluxo em Andamento
+          </p>
+          <div className="w-full bg-[#ff9900] hover:bg-[#e68a00] rounded-full py-2.5 px-5 flex items-center justify-between shadow-2xs transition-all">
+            <span className="font-black text-slate-950 text-sm tracking-tight tabular-nums">
+              {activeDemands.length} demandas
+            </span>
+            <span className="text-[11px] font-bold text-slate-900/80 flex items-center gap-0.5">
+              <span>•</span> {inProduction.length} produção
+            </span>
+          </div>
+        </div>
+
+        {/* KPI 2: Carteira de Clientes (Dark/Black Solid Capsule) */}
+        <div 
+          onClick={() => onNavigate('clientes')}
+          className="space-y-1.5 cursor-pointer group"
+          title="Ver carteira de clientes"
+        >
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 pl-1 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+            Carteira de Clientes
+          </p>
+          <div className="w-full bg-[#12151e] hover:bg-[#1a1f2e] rounded-full py-2.5 px-5 flex items-center justify-between shadow-2xs border border-slate-800/60 transition-all">
+            <span className="font-black text-white text-sm tracking-tight tabular-nums">
+              {clients.length} contas
+            </span>
+            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-0.5">
+              <span>•</span> {activeClients.length} ativas
+            </span>
+          </div>
+        </div>
+
+        {/* KPI 3: Entregas para Hoje (Light Grey Capsule) */}
+        <div 
+          onClick={() => {
+            setCurrentTab('demandas_prazos');
+            setDemandTab('hoje');
+          }}
+          className="space-y-1.5 cursor-pointer group"
+          title="Filtrar demandas com vencimento hoje"
+        >
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 pl-1 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+            Entregas de Hoje
+          </p>
+          <div className="w-full bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700/80 rounded-full py-2.5 px-5 flex items-center justify-between shadow-2xs transition-all">
+            <span className="font-black text-slate-900 dark:text-white text-sm tracking-tight tabular-nums">
+              {dueTodayDemands.length} para hoje
+            </span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
+              <span>•</span> {upcomingDemands.length} agendadas
+            </span>
+          </div>
+        </div>
+
+        {/* KPI 4: Atrasados (Diagonal Stripe Hatched Texture Capsule) */}
+        <div 
+          onClick={() => {
+            setCurrentTab('demandas_prazos');
+            setDemandTab('atrasadas');
+          }}
+          className="space-y-1.5 cursor-pointer group"
+          title="Filtrar demandas com prazo vencido"
+        >
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 pl-1 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+            Prazos Atrasados
+          </p>
+          <div 
+            className="w-full rounded-full py-2.5 px-5 flex items-center justify-between shadow-2xs border border-rose-300 dark:border-rose-900/50 relative overflow-hidden transition-all"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(45deg, #f8fafc, #f8fafc 8px, #edf2f7 8px, #edf2f7 16px)'
+            }}
+          >
+            <span className="font-black text-rose-600 dark:text-rose-500 text-sm tracking-tight relative z-10 tabular-nums">
+              {overdueDemands.length} em atraso
+            </span>
+            <span className="text-[11px] font-bold text-rose-700 dark:text-rose-400 relative z-10">
+              {overdueDemands.length > 0 ? '• Crítico' : '• 100% no prazo'}
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ==================================================================== */}
+      {/* 3. ABA ATIVA: "Visão Geral"                                          */}
+      {/*    (LAYOUT EM GRADE 7:5 COM CARD LIGHT À ESQUERDA E DARK À DIREITA)  */}
+      {/* ==================================================================== */}
+      {currentTab === 'visao_geral' && (
+        <div className="space-y-6">
+          
+          {/* Grid Principal 7:5 */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+            
+            {/* ---------------------------------------------------------------- */}
+            {/* COLUNA ESQUERDA: Pipeline de Produção & Entregas (7 cols)        */}
+            {/* ---------------------------------------------------------------- */}
+            <div className="lg:col-span-7 bg-white dark:bg-[#0c1424] rounded-[28px] p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between space-y-6">
+              
+              {/* Header do Card */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-[#ff9900] flex items-center justify-center border border-amber-200/60 dark:border-amber-900/40 shadow-xs">
+                    <Kanban size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                      Pipeline de Produção & Entregas
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Volume operacional distribuído pelas etapas do Kanban
+                    </p>
+                  </div>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-                  {greeting}, {currentUser.name}
-                </h2>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate('demandas')}
+                  className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-[#ff9900] hover:text-[#e68a00] cursor-pointer"
+                >
+                  <span>Abrir Kanban</span>
+                  <ArrowRight size={13} />
+                </button>
               </div>
+
+              {/* Área do Gráfico de Barras com Linhas Pontilhadas */}
+              <div className="relative pt-4 pb-2">
+                {/* Linhas de grade horizontais pontilhadas */}
+                <div className="space-y-7 text-[11px] font-mono text-slate-400">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-right tabular-nums">{maxPipelineCount}</span>
+                    <div className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-right tabular-nums">{Math.round(maxPipelineCount * 0.75)}</span>
+                    <div className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-right tabular-nums">{Math.round(maxPipelineCount * 0.5)}</span>
+                    <div className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-right tabular-nums">{Math.round(maxPipelineCount * 0.25)}</span>
+                    <div className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-right tabular-nums">0</span>
+                    <div className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800" />
+                  </div>
+                </div>
+
+                {/* Barras Horizontais / Verticais proporcionais */}
+                <div className="absolute inset-0 left-9 right-2 bottom-6 top-6 flex items-end justify-between px-3 sm:px-6">
+                  {pipelineStages.map((stage) => {
+                    const heightPercent = maxPipelineCount > 0 ? Math.min(100, Math.round((stage.count / maxPipelineCount) * 100)) : 0;
+                    return (
+                      <div 
+                        key={stage.id} 
+                        className="flex flex-col items-center gap-2 group relative z-10 cursor-pointer"
+                        onClick={() => onNavigate('demandas')}
+                      >
+                        {/* Tooltip on hover */}
+                        <div className="absolute -top-10 bg-slate-900 text-white text-[10px] py-1 px-2.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-md z-20">
+                          <span className="font-bold text-[#ff9900]">{stage.label}:</span> {stage.count} demanda(s)
+                        </div>
+
+                        {/* Barra */}
+                        <div 
+                          className="w-5 sm:w-7 bg-[#ff9900] hover:bg-[#e68a00] rounded-full transition-all shadow-xs min-h-[6px]"
+                          style={{ height: `${Math.max(6, heightPercent * 1.25)}px` }}
+                        />
+
+                        {/* Label da Etapa */}
+                        <span className="text-[11px] text-slate-500 font-medium truncate max-w-[65px] text-center" title={stage.label}>
+                          {stage.label.split(' ')[0]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Legenda do Gráfico */}
+                <div className="flex items-center justify-end gap-5 pt-7 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#ff9900]" />
+                    <span>Demandas Ativas</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-0.5 border-t-2 border-dashed border-slate-400" />
+                    <span>Capacidade da Agência</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Faixa métrica inferior dividida por borda pontilhada */}
+              <div className="pt-5 border-t border-dashed border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Em Produção</p>
+                  <p className="text-sm font-black text-blue-600 dark:text-blue-400 tracking-tight pt-0.5 tabular-nums">
+                    {inProduction.length} demandas
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Aprovação Cliente</p>
+                  <p className="text-sm font-black text-amber-600 dark:text-amber-400 tracking-tight pt-0.5 tabular-nums">
+                    {pendingApprovals.length} pendentes
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Para Agendamento</p>
+                  <p className="text-sm font-black text-purple-600 dark:text-purple-400 tracking-tight pt-0.5 tabular-nums">
+                    {scheduledDemands.length} agendadas
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Concluídas</p>
+                  <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 tracking-tight pt-0.5 tabular-nums">
+                    {concludedDemands.length} entregas
+                  </p>
+                </div>
+              </div>
+
             </div>
 
-            {/* Fita de Indicadores Executivos (Tabular Numerals, Zero AI Slop) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {/* Card 1: Fluxo Ativo */}
-              <div 
-                onClick={() => onNavigate('demandas')}
-                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fluxo em Andamento</p>
-                  <ArrowUpRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            {/* ---------------------------------------------------------------- */}
+            {/* COLUNA DIREITA: Prazos Críticos Dark Card (5 cols)               */}
+            {/* ---------------------------------------------------------------- */}
+            <div className="lg:col-span-5 bg-[#10141e] text-white rounded-[28px] p-6 sm:p-7 shadow-xl border border-slate-800/80 flex flex-col justify-between space-y-6">
+              
+              <div className="space-y-5">
+                {/* Header */}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center border border-rose-500/20 shadow-xs">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white tracking-tight">
+                      Prazos Críticos & Alertas
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      Entregas urgentes que exigem atenção imediata
+                    </p>
+                  </div>
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
-                  {activeDemands.length}
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 truncate">
-                  {inProduction.length} em produção · {pendingApprovals.length} em aprovação
-                </p>
-              </div>
 
-              {/* Card 2: Entregas para Hoje */}
-              <div 
-                onClick={() => {
-                  setDemandTab('hoje');
-                  const el = document.getElementById('section-container-prioridades');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Entregas de Hoje</p>
-                  {dueTodayDemands.length > 0 ? (
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                {/* Segmented Filter Pills estilo Financeiro */}
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setCriticalFilter('atrasadas')}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                      criticalFilter === 'atrasadas'
+                        ? 'bg-[#331114] text-[#f87171] border border-rose-900/50 shadow-xs'
+                        : 'bg-white/10 text-slate-300 hover:bg-white/15'
+                    }`}
+                  >
+                    Atrasadas ({overdueDemands.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCriticalFilter('hoje')}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                      criticalFilter === 'hoje'
+                        ? 'bg-[#332211] text-[#fbbf24] border border-amber-900/50 shadow-xs'
+                        : 'bg-white/10 text-slate-300 hover:bg-white/15'
+                    }`}
+                  >
+                    Para Hoje ({dueTodayDemands.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCriticalFilter('proximas')}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                      criticalFilter === 'proximas'
+                        ? 'bg-[#142142] text-[#60a5fa] border border-blue-900/50 shadow-xs'
+                        : 'bg-white/10 text-slate-300 hover:bg-white/15'
+                    }`}
+                  >
+                    Próximas ({upcomingDemands.length})
+                  </button>
+                </div>
+
+                {/* Lista de Demandas Críticas */}
+                <div className="space-y-3 pt-1 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                  {criticalDemandsList.length === 0 ? (
+                    <div className="py-10 text-center flex flex-col items-center justify-center space-y-2 text-slate-400">
+                      <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-emerald-400 mb-1">
+                        <CheckCircle2 size={20} />
+                      </div>
+                      <p className="text-xs font-bold text-white">Nenhum prazo crítico em aberto</p>
+                      <p className="text-[11px] text-slate-400">
+                        {criticalFilter === 'atrasadas' 
+                          ? 'Excelente! Todas as demandas da agência estão dentro do prazo previsto.' 
+                          : 'Nenhuma entrega agendada nesta categoria.'}
+                      </p>
+                    </div>
                   ) : (
-                    <Clock size={14} className="text-slate-400" />
+                    criticalDemandsList.slice(0, 5).map((demand) => {
+                      const dueStatus = demandDueStatusMap.get(demand.id) || getDemandDueStatus(demand);
+                      const clientInfo = getClientInfo(demand);
+
+                      return (
+                        <div 
+                          key={demand.id}
+                          className="flex items-center justify-between gap-3 p-2.5 rounded-2xl hover:bg-white/5 transition-colors cursor-pointer group"
+                          onClick={() => onSelectDemand ? onSelectDemand(demand.id) : onNavigate('demandas')}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {/* Avatar do Cliente */}
+                            {clientInfo.avatar ? (
+                              <img
+                                src={clientInfo.avatar}
+                                alt={clientInfo.displayName}
+                                className="w-8 h-8 rounded-full object-cover border border-white/20 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-white/10 border border-white/15 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                {clientInfo.initial}
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white truncate group-hover:text-[#ff9900] transition-colors">
+                                {demand.title}
+                              </p>
+                              <p className="text-[11px] text-slate-400 truncate">
+                                {clientInfo.displayName} · <span className={dueStatus.isOverdue ? 'text-rose-400 font-semibold' : 'text-amber-400'}>{dueStatus.label}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                              dueStatus.isOverdue 
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            }`}>
+                              {demand.priority || 'Normal'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
-                  {dueTodayDemands.length}
-                </div>
-                <p className={`text-[11px] mt-1 truncate font-medium ${
-                  overdueDemands.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
-                }`}>
-                  {overdueDemands.length > 0 
-                    ? `${overdueDemands.length} com prazo vencido` 
-                    : 'Todas as entregas no prazo'}
-                </p>
+
               </div>
 
-              {/* Card 3: Próximos Prazos */}
-              <div 
-                onClick={() => {
-                  setDemandTab('proximas');
-                  const el = document.getElementById('section-container-prioridades');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Próximos Prazos</p>
-                  <Calendar size={14} className="text-slate-400" />
-                </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
-                  {upcomingDemands.length}
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 truncate">
-                  Entregas programadas na semana
-                </p>
+              {/* Botão de Rodapé */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('demandas')}
+                  className="w-full py-2.5 px-4 rounded-full bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-white/10 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <span>Ver todas as demandas no Kanban</span>
+                  <ArrowRight size={14} />
+                </button>
               </div>
 
-              {/* Card 4: Clientes Ativos */}
-              <div 
-                onClick={() => onNavigate('clientes')}
-                className="bg-white dark:bg-[#0f172a] rounded-2xl p-4.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Carteira de Clientes</p>
-                  <Users size={14} className="text-slate-400" />
-                </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight mt-1.5">
-                  {clients.length}
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 truncate">
-                  {clients.length === 0 ? '0 ativas · Nenhuma empresa cadastrada' : `${activeClients.length} ativas · ${clients.length - activeClients.length} em onboarding`}
-                </p>
-              </div>
             </div>
+
           </div>
-        );
 
-      case 'demandas_stories': {
-        const hasActiveDemands = demands.some((d) => !isConcludedDemand(d, activeColumns));
-        if (!hasActiveDemands) {
-          return null;
-        }
-        return (
-          <DemandsStoriesSection
-            clients={clients}
-            demands={demands}
-            columns={activeColumns}
-            onSelectDemand={onSelectDemand}
-            onOpenNewDemandModal={onOpenNewDemandModal}
-          />
-        );
-      }
+          {/* Stories das Demandas (se houver demandas ativas) */}
+          {activeDemands.length > 0 && (
+            <DemandsStoriesSection
+              clients={clients}
+              demands={demands}
+              columns={activeColumns}
+              onSelectDemand={onSelectDemand}
+              onOpenNewDemandModal={onOpenNewDemandModal}
+            />
+          )}
 
-      case 'aniversariantes':
-        return (
+          {/* Seção Operacional com Atalhos e Ações Rápidas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <button
+              type="button"
+              onClick={onOpenNewDemandModal}
+              className="bg-white dark:bg-[#0c1424] rounded-[24px] p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-[#ff9900]/80 transition-all text-left flex items-center gap-4 cursor-pointer group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-[#ff9900] flex items-center justify-center border border-amber-200/60 dark:border-amber-900/40 shrink-0">
+                <Plus size={22} className="stroke-[3]" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-[#ff9900] transition-colors">
+                  Nova Demanda
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  Post, carrossel ou vídeo
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('clientes')}
+              className="bg-white dark:bg-[#0c1424] rounded-[24px] p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-emerald-500/80 transition-all text-left flex items-center gap-4 cursor-pointer group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-200/60 dark:border-emerald-900/40 shrink-0">
+                <UserPlus size={22} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-emerald-600 transition-colors">
+                  Cadastrar Cliente
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  Adicionar nova conta ao CRM
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('calendario')}
+              className="bg-white dark:bg-[#0c1424] rounded-[24px] p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-purple-500/80 transition-all text-left flex items-center gap-4 cursor-pointer group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-200/60 dark:border-purple-900/40 shrink-0">
+                <Calendar size={22} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-purple-600 transition-colors">
+                  Calendário Editorial
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  Datas, feriados e pautas
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('financeiro')}
+              className="bg-white dark:bg-[#0c1424] rounded-[24px] p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs hover:border-blue-500/80 transition-all text-left flex items-center gap-4 cursor-pointer group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200/60 dark:border-blue-900/40 shrink-0">
+                <Wallet size={22} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
+                  Módulo Financeiro
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  Fluxo de caixa e faturamento
+                </p>
+              </div>
+            </button>
+
+          </div>
+
+          {/* Aniversariantes do Mês */}
           <ClientBirthdaysSection
             clients={clients}
             onNavigate={onNavigate}
             onSelectClient={onSelectClient}
           />
-        );
 
-      case 'mapa':
-        return (
+          {/* Mapa de Clientes */}
           <ClientLocationMap
             clients={clients}
             onNavigate={onNavigate}
           />
-        );
 
-      case 'prioridades':
-        return (
-          <section aria-label="Demandas Prioritárias & Acesso Rápido" className="space-y-4">
-            {/* Header com título */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#fab518]" />
-                  <h3 className="text-base sm:text-lg font-black text-[#142142] dark:text-white tracking-tight">
-                    Demandas em Andamento & Prazos
-                  </h3>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 4. ABA ATIVA: "Demandas & Prazos"                                    */}
+      {/*    (LISTA DETALHADA COM BARRA DE BUSCA E FILTROS SEGMENTADOS)        */}
+      {/* ==================================================================== */}
+      {currentTab === 'demandas_prazos' && (
+        <div className="bg-white dark:bg-[#0c1424] rounded-[28px] border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-2xs space-y-5">
+          
+          {/* Header e Filtros */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-5">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                Controle Operacional de Demandas
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Acompanhe prazos de entrega, gargalos e tarefas em produção
+              </p>
+            </div>
+
+            {/* Segmented Filter Pills */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-1.5 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-300 overflow-x-auto scrollbar-none self-start lg:self-auto max-w-full">
+              <button
+                type="button"
+                onClick={() => setDemandTab('todas')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  demandTab === 'todas'
+                    ? 'bg-white dark:bg-[#0c1424] text-slate-900 dark:text-white font-bold shadow-2xs'
+                    : 'hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Todas ({activeDemands.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDemandTab('atrasadas')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                  demandTab === 'atrasadas'
+                    ? 'bg-rose-600 text-white font-bold shadow-2xs'
+                    : overdueDemands.length > 0
+                    ? 'text-rose-600 dark:text-rose-400 font-bold'
+                    : 'hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <AlertTriangle size={13} />
+                <span>Atrasadas ({overdueDemands.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDemandTab('hoje')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                  demandTab === 'hoje'
+                    ? 'bg-[#ff9900] text-[#142142] font-black shadow-2xs'
+                    : 'hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Clock size={13} />
+                <span>Para Hoje ({dueTodayDemands.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDemandTab('producao')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  demandTab === 'producao'
+                    ? 'bg-blue-600 text-white font-bold shadow-2xs'
+                    : 'hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Em Produção ({inProduction.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDemandTab('aprovacao')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  demandTab === 'aprovacao'
+                    ? 'bg-amber-600 text-white font-bold shadow-2xs'
+                    : 'hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Aprovação ({pendingApprovals.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Barra de Busca de Demandas */}
+          <div className="relative max-w-md">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={demandSearch}
+              onChange={(e) => setDemandSearch(e.target.value)}
+              placeholder="Buscar por título da demanda ou cliente..."
+              className="w-full text-xs pl-9 pr-8 py-2.5 rounded-full bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-hidden focus:border-[#ff9900] focus:bg-white dark:focus:bg-slate-900 transition-all shadow-2xs"
+            />
+            {demandSearch && (
+              <button
+                type="button"
+                onClick={() => setDemandSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xs"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* Lista de Demandas */}
+          <div className="space-y-2.5">
+            {filteredDemandsList.length === 0 ? (
+              <div className="py-14 text-center rounded-[24px] bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
+                  <CheckCircle2 size={24} />
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Acompanhe prazos críticos, gargalos de produção e atalhos rápidos da agência
+                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                  Nenhuma demanda encontrada nesta visualização
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Cadastre uma nova demanda ou altere os filtros de busca.
                 </p>
               </div>
-            </div>
+            ) : (
+              filteredDemandsList.map((demand) => {
+                const dueStatus = demandDueStatusMap.get(demand.id) || getDemandDueStatus(demand);
+                const clientInfo = getClientInfo(demand);
+                const assignee = getAssigneeInfo(demand.assignee);
 
-            {/* Grid Principal: 2 Colunas (Lista de Demandas + Coluna Lateral com Gráfico e Acesso Rápido) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
-              {/* Coluna 1 & 2: Painel de Todas as Demandas com Abas e Filtro de Atrasadas */}
-              <div className="lg:col-span-2 bg-white dark:bg-[#0f172a] rounded-[26px] border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col justify-between">
-                <div>
-                  {/* Topo do Card com Abas de Filtro */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-3.5 mb-4">
-                    {/* Abas Segmentadas Executive Style */}
-                    <div className="inline-flex items-center p-1.5 bg-slate-100/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 gap-1.5 overflow-x-auto scrollbar-none max-w-full shadow-xs backdrop-blur-sm">
-                      <button
-                        type="button"
-                        onClick={() => setDemandTab('todas')}
-                        title="Ver todas as demandas em andamento (do dia, próximas e atrasadas)"
-                        className={`px-3.5 py-1.5 rounded-xl text-xs transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2 active:scale-95 ${
-                          demandTab === 'todas'
-                            ? 'bg-white dark:bg-[#142142] text-[#142142] dark:text-white shadow-xs ring-1 ring-slate-200/90 dark:ring-slate-700 font-black'
-                            : 'font-semibold text-slate-600 dark:text-slate-400 hover:text-[#142142] dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/50'
-                        }`}
-                      >
-                        <Layers size={14} className={demandTab === 'todas' ? 'text-[#fab518]' : 'text-slate-400'} />
-                        <span>Todas</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold transition-colors ${
-                          demandTab === 'todas'
-                            ? 'bg-slate-100 dark:bg-slate-800 text-[#142142] dark:text-slate-200'
-                            : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
-                        }`}>
-                          {activeDemands.length}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDemandTab('atrasadas')}
-                        title={`${overdueDemands.length} demandas com prazo atrasado`}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2 active:scale-95 ${
-                          demandTab === 'atrasadas'
-                            ? 'bg-rose-600 text-white shadow-xs font-black'
-                            : overdueDemands.length > 0
-                            ? 'font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100/90 dark:hover:bg-rose-900/60 border border-rose-200/80 dark:border-rose-900/70'
-                            : 'font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/50'
-                        }`}
-                      >
-                        <AlertTriangle 
-                          size={14} 
-                          className={demandTab === 'atrasadas' ? 'text-white' : overdueDemands.length > 0 ? 'text-rose-600 dark:text-rose-400 animate-pulse' : 'text-slate-400'} 
-                        />
-                        <span>Atrasadas</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold transition-colors ${
-                          demandTab === 'atrasadas'
-                            ? 'bg-white/25 text-white'
-                            : overdueDemands.length > 0
-                            ? 'bg-rose-600 text-white shadow-2xs'
-                            : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
-                        }`}>
-                          {overdueDemands.length}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDemandTab('hoje')}
-                        title={`${dueTodayDemands.length} demandas com prazo para hoje`}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2 active:scale-95 ${
-                          demandTab === 'hoje'
-                            ? 'bg-[#fab518] text-[#142142] shadow-xs font-black'
-                            : dueTodayDemands.length > 0
-                            ? 'font-bold text-amber-900 dark:text-amber-200 bg-amber-100/90 dark:bg-amber-950/70 hover:bg-amber-200/80 dark:hover:bg-amber-900/70 border border-amber-300/80 dark:border-amber-800'
-                            : 'font-semibold text-slate-600 dark:text-slate-400 hover:text-[#142142] dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/50'
-                        }`}
-                      >
-                        <Clock 
-                          size={14} 
-                          className={demandTab === 'hoje' ? 'text-[#142142]' : dueTodayDemands.length > 0 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-400'} 
-                        />
-                        <span>Do Dia</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold transition-colors ${
-                          demandTab === 'hoje'
-                            ? 'bg-[#142142]/20 text-[#142142]'
-                            : dueTodayDemands.length > 0
-                            ? 'bg-[#fab518] text-[#142142] font-black'
-                            : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
-                        }`}>
-                          {dueTodayDemands.length}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDemandTab('proximas')}
-                        title={`${upcomingDemands.length} próximas demandas`}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2 active:scale-95 ${
-                          demandTab === 'proximas'
-                            ? 'bg-white dark:bg-[#142142] text-[#142142] dark:text-white shadow-xs ring-1 ring-slate-200/90 dark:ring-slate-700 font-black'
-                            : 'font-semibold text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/60 dark:hover:bg-slate-700/50'
-                        }`}
-                      >
-                        <Calendar size={14} className={demandTab === 'proximas' ? 'text-blue-500' : 'text-slate-400'} />
-                        <span>Próximas</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold transition-colors ${
-                          demandTab === 'proximas'
-                            ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-                            : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
-                        }`}>
-                          {upcomingDemands.length}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDemandTab('producao')}
-                        title="Demandas em produção no momento"
-                        className={`px-3.5 py-1.5 rounded-xl text-xs transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2 active:scale-95 ${
-                          demandTab === 'producao'
-                            ? 'bg-white dark:bg-[#142142] text-[#142142] dark:text-white shadow-xs ring-1 ring-slate-200/90 dark:ring-slate-700 font-black'
-                            : 'font-semibold text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-white/60 dark:hover:bg-slate-700/50'
-                        }`}
-                      >
-                        <Sparkles size={14} className={demandTab === 'producao' ? 'text-purple-500' : 'text-slate-400'} />
-                        <span>Produção</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold transition-colors ${
-                          demandTab === 'producao'
-                            ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
-                            : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
-                        }`}>
-                          {inProduction.length}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDemandTab('aprovacao')}
-                        title="Demandas aguardando aprovação do cliente"
-                        className={`px-3.5 py-1.5 rounded-xl text-xs transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2 active:scale-95 ${
-                          demandTab === 'aprovacao'
-                            ? 'bg-white dark:bg-[#142142] text-[#142142] dark:text-white shadow-xs ring-1 ring-slate-200/90 dark:ring-slate-700 font-black'
-                            : 'font-semibold text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-white/60 dark:hover:bg-slate-700/50'
-                        }`}
-                      >
-                        <CheckCircle2 size={14} className={demandTab === 'aprovacao' ? 'text-amber-500' : 'text-slate-400'} />
-                        <span>Aprovação</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold transition-colors ${
-                          demandTab === 'aprovacao'
-                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                            : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
-                        }`}>
-                          {pendingApprovals.length}
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Busca Rápida de Demandas */}
-                    <div className="relative min-w-[200px] w-full sm:w-auto">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={demandSearch}
-                        onChange={(e) => setDemandSearch(e.target.value)}
-                        placeholder="Buscar demanda ou cliente..."
-                        className="w-full text-xs pl-8 pr-7 py-2 rounded-2xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-hidden focus:border-[#fab518] focus:bg-white dark:focus:bg-slate-900 transition-all shadow-2xs"
-                      />
-                      {demandSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setDemandSearch('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xs w-4 h-4 rounded-full flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Lista de Demandas */}
-                  <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1 scrollbar-thin">
-                    {filteredDemandsList.length > 0 ? (
-                      filteredDemandsList.map((demand) => {
-                        const dueStatus = demandDueStatusMap.get(demand.id) || getDemandDueStatus(demand);
-                        const colConfig = getColumnConfig(demand.columnId);
-                        const assignee = getAssigneeInfo(demand.assignee);
-                        const clientInfo = getClientInfo(demand);
-
-                        return (
-                          <div
-                            key={demand.id}
-                            onClick={() => onSelectDemand ? onSelectDemand(demand.id) : onNavigate('demandas')}
-                            className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group relative overflow-hidden ${
-                              dueStatus.isOverdue
-                                ? 'bg-white dark:bg-[#0f172a] border-rose-200/90 dark:border-rose-900/60 hover:border-rose-400 hover:shadow-xs'
-                                : dueStatus.status === 'hoje'
-                                ? 'bg-white dark:bg-[#0f172a] border-amber-300/80 dark:border-amber-800/80 hover:border-amber-400 hover:shadow-xs'
-                                : 'bg-white dark:bg-[#0f172a] border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs'
-                            }`}
-                          >
-                            {/* Faixa sutil lateral com a cor da coluna ou alerta */}
-                            <div 
-                              className="absolute left-0 top-0 bottom-0 w-1 transition-colors"
-                              style={{ backgroundColor: dueStatus.isOverdue ? '#e11d48' : (colConfig.color || '#fab518') }}
-                            />
-
-                            {/* Lado Esquerdo: Info da Demanda */}
-                            <div className="space-y-1 min-w-0 flex-1 pl-1.5">
-                              {/* Metadados limpos com separadores tipográficos (Anti-AI Slop) */}
-                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
-                                  {demand.client}
-                                </span>
-                                {demand.type && (
-                                  <>
-                                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
-                                    <span>{demand.type}</span>
-                                  </>
-                                )}
-                                <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
-                                <span style={{ color: colConfig.color }} className="font-medium">
-                                  {colConfig.label}
-                                </span>
-                                {demand.priority === 'urgente' && (
-                                  <>
-                                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
-                                    <span className="text-rose-600 dark:text-rose-400 font-semibold inline-flex items-center gap-0.5">
-                                      <Flame size={12} />
-                                      Urgente
-                                    </span>
-                                  </>
-                                )}
-                                {demand.priority === 'alta' && (
-                                  <>
-                                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
-                                    <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                                      Alta
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#fab518] transition-colors truncate">
-                                  {demand.title}
-                                </h4>
-                              </div>
-                            </div>
-
-                            {/* Lado Direito: Prazo, Responsável & Botão */}
-                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800 shrink-0">
-                              {/* Prazo com contexto humano legível */}
-                              <div className="text-right">
-                                <div className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
-                                  dueStatus.isOverdue
-                                    ? 'text-rose-600 dark:text-rose-400'
-                                    : dueStatus.status === 'hoje'
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : dueStatus.status === 'amanha'
-                                    ? 'text-amber-700 dark:text-amber-300'
-                                    : dueStatus.status === 'concluida'
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-slate-600 dark:text-slate-400'
-                                }`}>
-                                  {dueStatus.status === 'concluida' ? (
-                                    <>
-                                      <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400" />
-                                      <span>Concluída</span>
-                                    </>
-                                  ) : dueStatus.isOverdue ? (
-                                    <>
-                                      <CalendarX2 size={13} className="text-rose-600 dark:text-rose-400" />
-                                      <span>{dueStatus.label}</span>
-                                    </>
-                                  ) : dueStatus.status === 'hoje' ? (
-                                    <>
-                                      <Clock size={13} className="text-amber-600 dark:text-amber-400" />
-                                      <span>Vence hoje!</span>
-                                    </>
-                                  ) : dueStatus.status === 'amanha' ? (
-                                    <>
-                                      <Clock size={13} className="text-amber-600 dark:text-amber-400" />
-                                      <span>Vence amanhã</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Calendar size={13} className="text-slate-400" />
-                                      <span>{dueStatus.label}</span>
-                                    </>
-                                  )}
-                                </div>
-                                {demand.dueDate && dueStatus.isOverdue && (
-                                  <p className="text-[10px] text-rose-500 font-medium mt-0.5">
-                                    Venceu: {formatDemandDateFull(demand.dueDate)}
-                                  </p>
-                                )}
-                              </div>
-
-                              {/* Avatar do Cliente */}
-                              <div className="flex items-center gap-2 shrink-0" title={`Cliente: ${clientInfo.displayName}`}>
-                                {clientInfo.avatar ? (
-                                  <img
-                                    src={clientInfo.avatar}
-                                    alt={clientInfo.displayName}
-                                    className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-2xs"
-                                  />
-                                ) : (
-                                  <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-[#142142] dark:text-[#fab518] border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] font-bold shadow-2xs">
-                                    {clientInfo.initial}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Botão de abrir detalhes */}
-                              <div className="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:text-[#142142] dark:group-hover:text-white flex items-center justify-center transition-colors shrink-0">
-                                <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="py-12 px-4 text-center rounded-2xl bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
-                          <CheckCircle2 size={24} />
-                        </div>
-                        <p className="text-sm font-bold text-[#142142] dark:text-white">
-                          {demandTab === 'atrasadas'
-                            ? 'Nenhuma demanda atrasada!'
-                            : demandTab === 'hoje'
-                            ? 'Nenhuma demanda com prazo para hoje!'
-                            : demandTab === 'proximas'
-                            ? 'Nenhuma próxima demanda agendada'
-                            : demandSearch
-                            ? 'Nenhuma demanda encontrada com o termo buscado'
-                            : 'Nenhuma demanda ativa nesta categoria'}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                          {demandTab === 'atrasadas'
-                            ? 'Excelente! Todas as entregas e cronogramas da equipe estão no prazo.'
-                            : demandTab === 'hoje'
-                            ? 'Tudo em dia para hoje! Nenhuma entrega urgente agendada para hoje.'
-                            : demandTab === 'proximas'
-                            ? 'Novas entregas planejadas para os próximos dias aparecerão aqui.'
-                            : 'Crie uma nova demanda ou confira o quadro completo no Kanban.'}
-                        </p>
-                        {demandTab !== 'todas' && (
-                          <button
-                            type="button"
-                            onClick={() => setDemandTab('todas')}
-                            className="mt-2 text-xs font-bold text-[#fab518] hover:underline cursor-pointer"
-                          >
-                            Ver todas as demandas em andamento →
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Rodapé do Card de Demandas com Atalho Rápido para Kanban */}
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
-                  <span className="font-semibold text-slate-600 dark:text-slate-300">
-                    {demandTab === 'atrasadas'
-                      ? `Mostrando ${filteredDemandsList.length} de ${overdueDemands.length} demandas atrasadas`
-                      : demandTab === 'hoje'
-                      ? `Mostrando ${filteredDemandsList.length} de ${dueTodayDemands.length} demandas do dia`
-                      : demandTab === 'proximas'
-                      ? `Mostrando ${filteredDemandsList.length} de ${upcomingDemands.length} próximas demandas`
-                      : `Mostrando ${filteredDemandsList.length} de ${activeDemands.length} demandas em andamento`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('demandas')}
-                    className="font-bold text-[#142142] dark:text-[#fab518] hover:underline flex items-center gap-1 cursor-pointer"
+                return (
+                  <div
+                    key={demand.id}
+                    onClick={() => onSelectDemand ? onSelectDemand(demand.id) : onNavigate('demandas')}
+                    className={`p-4 rounded-[20px] border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group hover:border-[#ff9900] hover:shadow-xs ${
+                      dueStatus.isOverdue
+                        ? 'bg-rose-50/20 dark:bg-rose-950/10 border-rose-200 dark:border-rose-900/50'
+                        : dueStatus.status === 'hoje'
+                        ? 'bg-amber-50/20 dark:bg-amber-950/10 border-amber-200 dark:border-amber-900/50'
+                        : 'bg-white dark:bg-[#0c1424] border-slate-200/80 dark:border-slate-800'
+                    }`}
                   >
-                    <span>Ver quadro completo no Kanban</span>
-                    <ChevronRight size={14} />
-                  </button>
+                    <div className="flex items-center gap-3 min-w-0">
+                      {clientInfo.avatar ? (
+                        <img
+                          src={clientInfo.avatar}
+                          alt={clientInfo.displayName}
+                          className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-700 dark:text-slate-300 shrink-0">
+                          {clientInfo.initial}
+                        </div>
+                      )}
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="font-semibold text-slate-900 dark:text-white truncate">
+                            {clientInfo.displayName}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span>{demand.type || 'Geral'}</span>
+                          {demand.priority === 'urgente' && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="text-rose-600 font-bold flex items-center gap-0.5">
+                                <Flame size={12} /> Urgente
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#ff9900] transition-colors truncate">
+                          {demand.title}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
+                      <div className="text-right">
+                        <span className={`text-xs font-bold inline-flex items-center gap-1.5 ${
+                          dueStatus.isOverdue 
+                            ? 'text-rose-600 dark:text-rose-400' 
+                            : dueStatus.status === 'hoje'
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-slate-600 dark:text-slate-400'
+                        }`}>
+                          <Clock size={13} />
+                          <span>{dueStatus.label}</span>
+                        </span>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                          Resp: {assignee.name}
+                        </p>
+                      </div>
+
+                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white flex items-center justify-center transition-colors">
+                        <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 5. ABA ATIVA: "Clientes & CRM"                                       */}
+      {/* ==================================================================== */}
+      {currentTab === 'clientes_crm' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-[#0c1424] rounded-[26px] p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-1">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total de Contas</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{clients.length}</p>
+              <p className="text-xs text-slate-400">Clientes cadastrados na agência</p>
+            </div>
+
+            <div className="bg-white dark:bg-[#0c1424] rounded-[26px] p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-1">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Contas Ativas</p>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{activeClients.length}</p>
+              <p className="text-xs text-slate-400">Contratos vigentes com demandas</p>
+            </div>
+
+            <div className="bg-white dark:bg-[#0c1424] rounded-[26px] p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-1">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Em Onboarding</p>
+              <p className="text-2xl font-black text-blue-600 dark:text-blue-400 tabular-nums">
+                {clients.filter(c => c.status === 'Em Onboarding').length}
+              </p>
+              <p className="text-xs text-slate-400">Fase inicial de alinhamento</p>
+            </div>
+          </div>
+
+          {/* Aniversariantes */}
+          <ClientBirthdaysSection
+            clients={clients}
+            onNavigate={onNavigate}
+            onSelectClient={onSelectClient}
+          />
+
+          {/* Mapa Geográfico de Clientes */}
+          <ClientLocationMap
+            clients={clients}
+            onNavigate={onNavigate}
+          />
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 6. ABA ATIVA: "Desempenho & Equipe"                                  */}
+      {/* ==================================================================== */}
+      {currentTab === 'desempenho_equipe' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+            
+            {/* Gráfico de Rosca de Status */}
+            <div className="lg:col-span-6 bg-white dark:bg-[#0c1424] rounded-[28px] p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+              <DemandsStatusDoughnutChart demands={demands} columns={activeColumns} onNavigate={onNavigate} />
+            </div>
+
+            {/* Quadro da Equipe */}
+            <div className="lg:col-span-6 bg-white dark:bg-[#0c1424] rounded-[28px] p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center border border-purple-200/60 dark:border-purple-900/40">
+                    <Users size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Capacidade da Equipe</h3>
+                    <p className="text-xs text-slate-500">Distribuição de demandas por colaborador</p>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate('equipe')}
+                  className="text-xs font-bold text-[#ff9900] hover:underline cursor-pointer"
+                >
+                  Gerenciar equipe →
+                </button>
               </div>
 
-              {/* Coluna 3: Gráfico de Rosca de Status & Acesso Rápido */}
-              <div className="space-y-5">
-                {/* Gráfico de Status */}
-                <DemandsStatusDoughnutChart demands={demands} columns={activeColumns} onNavigate={onNavigate} />
+              <div className="space-y-3">
+                {teamMembers.map((member) => {
+                  const memberDemands = demands.filter(d => 
+                    d.assignee?.name?.toLowerCase().includes(member.name.toLowerCase()) && !isConcludedDemand(d, activeColumns)
+                  );
 
-                {/* Acesso Rápido Operacional */}
-                <div className="bg-white dark:bg-[#0f172a] rounded-[26px] border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
-                    <h3 className="text-sm font-bold text-[#142142] dark:text-white tracking-tight flex items-center gap-2">
-                      <Compass size={16} className="text-[#fab518]" />
-                      <span>Atalhos da Operação</span>
-                    </h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={onOpenNewDemandModal}
-                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
+                  return (
+                    <div 
+                      key={member.id} 
+                      className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold shrink-0">
-                          <Plus size={16} className="stroke-[2.5]" />
-                        </div>
+                        {member.avatar ? (
+                          <img
+                            src={member.avatar}
+                            alt={member.name}
+                            className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 flex items-center justify-center text-xs font-bold shrink-0">
+                            {member.name.charAt(0)}
+                          </div>
+                        )}
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Nova Demanda</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Criar post, carrossel ou campanha</p>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{member.name}</p>
+                          <p className="text-[11px] text-slate-500 truncate">{member.role}</p>
                         </div>
                       </div>
-                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
-                    </button>
 
-                    <button
-                      type="button"
-                      onClick={() => onNavigate('calendario')}
-                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shrink-0">
-                          <Calendar size={15} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Calendário Editorial</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Feriados, datas e ideias de posts</p>
-                        </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          {memberDemands.length} tarefas
+                        </span>
+                        <p className="text-[10px] text-slate-400">em andamento</p>
                       </div>
-                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onNavigate('orcamentos')}
-                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
-                          <FileSpreadsheet size={15} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Propostas & Orçamentos</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Comercial, precificação e faturas</p>
-                        </div>
-                      </div>
-                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onNavigate('clientes')}
-                      className="w-full text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
-                          <UserPlus size={15} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Cadastrar Cliente</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Adicionar nova conta ao CRM</p>
-                        </div>
-                      </div>
-                      <ArrowRight size={14} className="text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0" />
-                    </button>
-                  </div>
-                </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </section>
-        );
 
-      default:
-        return null;
-    }
-  };
+          </div>
+        </div>
+      )}
 
-  return (
-    <div className="space-y-6 pb-12">
-      {/* Seções do Painel de Início */}
-      <div className="space-y-4">
-        {visibleSections.map((sectionId) => {
-          const content = renderSectionContent(sectionId);
-          if (!content) return null;
-          return (
-            <div key={sectionId} id={`section-container-${sectionId}`}>
-              {content}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 };
