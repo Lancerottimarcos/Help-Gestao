@@ -94,9 +94,21 @@ export const ClientBirthdaysSection: React.FC<ClientBirthdaysSectionProps> = ({
         return;
       }
 
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10);
-      const day = parseInt(parts[2], 10);
+      let year = 0;
+      let month = 0;
+      let day = 0;
+
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD format
+        year = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10);
+        day = parseInt(parts[2], 10);
+      } else {
+        // DD/MM/YYYY or DD-MM-YYYY format (Brazilian standard)
+        day = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10);
+        year = parseInt(parts[2], 10);
+      }
 
       if (isNaN(month) || isNaN(day) || month < 1 || month > 12 || day < 1 || day > 31) {
         withoutDate.push(client);

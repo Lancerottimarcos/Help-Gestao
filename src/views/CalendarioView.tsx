@@ -88,20 +88,31 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
     return (clients || [])
       .filter((c) => c && c.birthDate)
       .map((c) => {
-        const parts = c.birthDate.split('-');
+        const parts = c.birthDate.split(/[-/]/);
         let m = 0;
         let d = 0;
         if (parts.length === 3) {
-          m = parseInt(parts[1], 10);
-          d = parseInt(parts[2], 10);
+          if (parts[0].length === 4) {
+            // YYYY-MM-DD
+            m = parseInt(parts[1], 10);
+            d = parseInt(parts[2], 10);
+          } else {
+            // DD/MM/YYYY
+            d = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+          }
         } else if (parts.length === 2) {
-          m = parseInt(parts[0], 10);
-          d = parseInt(parts[1], 10);
+          d = parseInt(parts[0], 10);
+          m = parseInt(parts[1], 10);
+        }
+
+        if (isNaN(m) || isNaN(d) || m < 1 || m > 12 || d < 1 || d > 31) {
+          return null;
         }
 
         const dateStr = `2026-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
-        return {
+        const item: CommemorativeDate = {
           id: `bday-${c.id}`,
           title: `Aniversário de ${c.contactName || c.name}`,
           date: dateStr,
@@ -116,7 +127,9 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
           suggestedFormats: ['Stories', 'Post'],
           clientRefId: c.id,
         };
-      });
+        return item;
+      })
+      .filter((item): item is CommemorativeDate => item !== null);
   }, [clients]);
 
   // Combine all dates: Initial catalogue + Custom agency dates + Client birthdays

@@ -512,7 +512,16 @@ export const ClientDetailDrawer: React.FC<ClientDetailDrawerProps> = ({
                         <div className="flex items-center gap-2 mt-0.5">
                           <Calendar size={13} className="text-[#fab518] shrink-0" />
                           <span className="font-bold text-[#142142]">
-                            {new Date(`${client.birthDate}T00:00:00`).toLocaleDateString('pt-BR')}
+                            {(() => {
+                              const d = client.birthDate.trim();
+                              if (d.includes('/')) return d;
+                              if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
+                                const parts = d.split('T')[0].split('-');
+                                if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                              }
+                              const dt = new Date(`${d}T00:00:00`);
+                              return !isNaN(dt.getTime()) ? dt.toLocaleDateString('pt-BR') : d;
+                            })()}
                           </span>
                         </div>
                       </div>

@@ -8,6 +8,7 @@ import {
   Service
 } from '../types';
 import { FlamengoMockupCard } from '../components/FlamengoMockupCard';
+import { QuickStatsWidget } from '../components/QuickStatsWidget';
 import { 
   User, 
   Mail, 
@@ -242,6 +243,14 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     return clientDemands.filter(d => d.columnId !== 'concluidas').length;
   }, [clientDemands, isClientRole, pendingApprovalDemands]);
 
+  // Demandas ativas (não concluídas) do cliente no pipeline da agência
+  const clientActiveDemands = useMemo(() => {
+    return clientDemands.filter(d => {
+      const col = (d.columnId || '').toLowerCase().trim();
+      return col !== 'concluidas' && col !== 'concluidos' && col !== 'concluido' && col !== 'done';
+    });
+  }, [clientDemands]);
+
   // Valor do serviço contratado pelo cliente (mensalidade / pacote)
   const contractedServiceValue = useMemo(() => {
     // 1. Mensalidade explicitamente cadastrada no cliente
@@ -395,15 +404,37 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
     return set.size;
   }, [clientDemands]);
 
-  // Faturas do cliente
+  // Faturas do cliente logado
   const clientInvoices = useMemo(() => {
-    const cName = activeClient.name.toLowerCase();
-    const cCompany = (activeClient.companyName || '').toLowerCase();
+    const cName = (activeClient.name || '').toLowerCase().trim();
+    const cCompany = (activeClient.companyName || '').toLowerCase().trim();
+    const cContact = (activeClient.contactName || '').toLowerCase().trim();
     return invoices.filter(i => {
-      const invClient = (i.client || '').toLowerCase();
-      return invClient === cName || invClient === cCompany;
+      if ((i as any).clientId && (i as any).clientId === activeClient.id) return true;
+      const invClient = (i.client || '').toLowerCase().trim();
+      return (
+        invClient === cName || 
+        invClient === cCompany || 
+        (cContact && invClient === cContact) ||
+        (cCompany && (invClient.includes(cCompany) || cCompany.includes(invClient))) ||
+        (cName && (invClient.includes(cName) || cName.includes(invClient)))
+      );
     });
   }, [invoices, activeClient]);
+
+  // Valor total acumulado de faturas do cliente
+  const totalInvoicesValue = useMemo(() => {
+    return clientInvoices.reduce((sum, inv) => sum + (inv.value || 0), 0);
+  }, [clientInvoices]);
+
+  // Faturas pendentes e pagas
+  const pendingInvoicesCount = useMemo(() => {
+    return clientInvoices.filter(i => i.status === 'Pendente').length;
+  }, [clientInvoices]);
+
+  const paidInvoicesCount = useMemo(() => {
+    return clientInvoices.filter(i => i.status === 'Pago').length;
+  }, [clientInvoices]);
 
   const handleApprove = (demandId: string) => {
     onClientApprovalAction(demandId, 'aprovado');
@@ -852,6 +883,20 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
               Veja o que a agência preparou para você.
             </p>
           </div>
+
+          {/* Quick Stats Widget */}
+          <QuickStatsWidget
+            activeDemandsCount={clientActiveDemands.length}
+            pendingApprovalsCount={pendingApprovalDemands.length}
+            totalInvoicesCount={clientInvoices.length}
+            totalInvoicesValue={totalInvoicesValue}
+            pendingInvoicesCount={pendingInvoicesCount}
+            paidInvoicesCount={paidInvoicesCount}
+            clientName={activeClient.companyName || activeClient.name}
+            onNavigateToDemands={() => setActiveTab('conteudo')}
+            onNavigateToApprovals={() => setActiveTab('conteudo')}
+            onNavigateToInvoices={() => setActiveTab('financeiro')}
+          />
 
           {/* Grid Principal com 2 Cards Grandes lado a lado */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6 items-start">
@@ -1484,35 +1529,45 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                 Visão geral
               </p>
 
-              {/* 3 Contadores Grandes Lado a Lado (Projetos, Conteúdos pendentes, Demandas ativas) */}
-              <div className="grid grid-cols-3 gap-3">
-                {/* 1. Projetos */}
+              {/* 4 Contadores (Demandas ativas, Para aprovar, Faturas, Projetos) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* 1. Demandas ativas */}
                 <div>
-                  <p className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white">
-                    {projectsCount}
+                  <p className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
+                    {clientActiveDemands.length}
                   </p>
-                  <p className="text-xs text-slate-400 font-medium pt-1">
-                    Projetos
+                  <p className="text-[11px] text-slate-400 font-medium pt-1">
+                    Demandas ativas
                   </p>
                 </div>
 
                 {/* 2. Conteúdos pendentes (Destaque em Laranja) */}
                 <div>
-                  <p className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-[#ff9900]">
+                  <p className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-[#ff9900]">
                     {pendingApprovalDemands.length}
                   </p>
-                  <p className="text-xs text-slate-400 font-medium pt-1">
-                    Conteúdos pendentes
+                  <p className="text-[11px] text-slate-400 font-medium pt-1">
+                    Para aprovar
                   </p>
                 </div>
 
-                {/* 3. Demandas ativas */}
+                {/* 3. Total de Faturas */}
                 <div>
-                  <p className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white">
-                    {activeDemandsCount}
+                  <p className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-400">
+                    {clientInvoices.length}
                   </p>
-                  <p className="text-xs text-slate-400 font-medium pt-1">
-                    Demandas ativas
+                  <p className="text-[11px] text-slate-400 font-medium pt-1">
+                    Total faturas
+                  </p>
+                </div>
+
+                {/* 4. Projetos */}
+                <div>
+                  <p className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
+                    {projectsCount}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium pt-1">
+                    Projetos
                   </p>
                 </div>
               </div>
@@ -1916,6 +1971,75 @@ export const PortalClienteView: React.FC<PortalClienteViewProps> = ({
                 Banco: 260 - Nu Pagamentos S.A.
               </p>
             </div>
+          </div>
+
+          {/* Histórico de Faturas & Cobranças do Cliente */}
+          <div className="pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt size={17} className="text-[#ff9900]" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Histórico de Faturas & Cobranças
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono font-bold">
+                  {clientInvoices.length}
+                </span>
+              </div>
+              {totalInvoicesValue > 0 && (
+                <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
+                  Total faturado: <strong className="text-slate-900 dark:text-white">R$ {totalInvoicesValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                </span>
+              )}
+            </div>
+
+            {clientInvoices.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-dashed border-slate-200 dark:border-slate-800 text-center space-y-1">
+                <p className="text-xs font-bold text-slate-800 dark:text-white">
+                  Nenhuma fatura emitida no momento
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Todas as faturas geradas pela agência ficarão disponíveis para consulta e comprovante aqui.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {clientInvoices.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="p-3.5 sm:p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-all"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
+                          {inv.service || 'Serviços de Marketing & Design'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          inv.status === 'Pago' 
+                            ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                        }`}>
+                          {inv.status}
+                        </span>
+                        {inv.category && (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-800 text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                            {inv.category}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>Vencimento: {inv.dueDate || 'A combinar'}</span>
+                        {inv.paymentMethod && <span>Forma: {inv.paymentMethod}</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-mono font-black text-sm sm:text-base text-slate-900 dark:text-white">
+                        R$ {(inv.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

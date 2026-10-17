@@ -757,7 +757,18 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
                 {client.birthDate && (
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
                     <Calendar size={13} className="text-[#fab518] shrink-0" />
-                    <span>Nasc: <strong className="font-mono font-semibold">{new Date(`${client.birthDate}T00:00:00`).toLocaleDateString('pt-BR')}</strong></span>
+                    <span>Nasc: <strong className="font-mono font-semibold">
+                      {(() => {
+                        const d = client.birthDate.trim();
+                        if (d.includes('/')) return d;
+                        if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
+                          const parts = d.split('T')[0].split('-');
+                          if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                        }
+                        const dt = new Date(`${d}T00:00:00`);
+                        return !isNaN(dt.getTime()) ? dt.toLocaleDateString('pt-BR') : d;
+                      })()}
+                    </strong></span>
                   </div>
                 )}
               </div>

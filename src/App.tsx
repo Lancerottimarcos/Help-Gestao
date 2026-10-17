@@ -3077,9 +3077,17 @@ export function Layout({ children, onLogout }: LayoutProps) {
             demands={demands}
             clients={clients}
             columns={kanbanColumns}
+            teamMembers={teamMembers}
+            invoices={invoices}
             activities={activities}
             onOpenNewDemandModal={() => setIsNewDemandModalOpen(true)}
-            onSelectDemand={() => setCurrentPage('demandas')}
+            onSelectDemand={(demandId) => {
+              setSelectedDemandIdForKanban(demandId);
+              setCurrentPage('demandas');
+            }}
+            onSelectClient={() => {
+              setCurrentPage('clientes');
+            }}
           />
         );
     }

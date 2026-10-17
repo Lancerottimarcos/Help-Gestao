@@ -4,7 +4,23 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
-import { isValidCnpj } from "./src/utils/cnpjValidator";
+function isValidCnpj(cnpj: string): boolean {
+  const clean = (cnpj || '').replace(/\D/g, '');
+  if (!clean || clean.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(clean)) return false;
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum1 = 0;
+  for (let i = 0; i < 12; i++) sum1 += parseInt(clean[i], 10) * weights1[i];
+  const mod1 = sum1 % 11;
+  const d1 = mod1 < 2 ? 0 : 11 - mod1;
+  if (parseInt(clean[12], 10) !== d1) return false;
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum2 = 0;
+  for (let i = 0; i < 13; i++) sum2 += parseInt(clean[i], 10) * weights2[i];
+  const mod2 = sum2 % 11;
+  const d2 = mod2 < 2 ? 0 : 11 - mod2;
+  return parseInt(clean[13], 10) === d2;
+}
 
 const CONFIG_FILE = path.join(process.cwd(), "supabase-config.json");
 const DATA_DIR = path.join(process.cwd(), "data");
