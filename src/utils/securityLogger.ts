@@ -57,6 +57,18 @@ export function sanitizeForLog(data: unknown, depth = 0): unknown {
     return data.map((item) => sanitizeForLog(item, depth + 1));
   }
 
+  if (data instanceof Error) {
+    const errObj: Record<string, unknown> = {
+      name: data.name,
+      message: sanitizeString(data.message),
+      stack: data.stack ? sanitizeString(data.stack) : undefined,
+    };
+    for (const [key, val] of Object.entries(data)) {
+      errObj[key] = sanitizeForLog(val, depth + 1);
+    }
+    return errObj;
+  }
+
   if (typeof data === 'object') {
     const sanitizedObj: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(data as Record<string, unknown>)) {

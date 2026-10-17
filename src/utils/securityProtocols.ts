@@ -874,8 +874,14 @@ export function enforceHttpsRuntime(): void {
   const isHttp = window.location.protocol === 'http:';
   const hostname = window.location.hostname;
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+  let isIframe = false;
+  try {
+    isIframe = window.self !== window.top;
+  } catch {
+    isIframe = true;
+  }
 
-  if (config.enforceHttps && isHttp && !isLocalhost) {
+  if (config.enforceHttps && isHttp && !isLocalhost && !isIframe) {
     addSecurityLog({
       eventType: 'https_redirect',
       severity: 'warning',
